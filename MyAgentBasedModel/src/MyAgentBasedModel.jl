@@ -10,7 +10,9 @@ export
     _place_influencers,
     OpinionModelProblem,
     OpinionModelParams,
-    AgAg_attraction
+    AgAg_attraction,
+    InfAg_attraction,
+    MedAg_attraction
 
 include("utils.jl")
 include("abm.jl")

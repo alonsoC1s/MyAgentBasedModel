@@ -1,5 +1,6 @@
 
-using Statistics
+using Statistics, Random
+
 
 ## Maybe Fix:
 # _boolean_combinator gives the orthant's signatures in a "weird order". Instead
@@ -86,4 +87,22 @@ function _place_influencers(X, AgInfNet)
     end
 
     return I
+end
+
+"""
+    _media_network(n::Int, M::Int)
+
+Returns the adjacency matrix of `n` agents to `M` media outlets such that each
+agent is connected to at least one media outlet, possible more.
+"""
+function _media_network(n, M)
+    C = rand([true, false], n, M)
+    spots_failing = findall(all(.!c) for c = eachrow(C))
+    fix_index = rand(1:M, length(spots_failing))
+
+    for (row, fix_col) = zip(axes(C, 1), fix_index)
+        C[row, fix_col] .= true
+    end
+
+    return C |> BitMatrix
 end
