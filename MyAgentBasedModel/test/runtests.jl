@@ -115,6 +115,12 @@ end
    X, Y, Z = o.X, o.M, o.I
    A, B, C = o.AgAgNet, o.AgMedNet, o.AgInfNet
 
+   # Testing model violation detections
+   invalid_network = [true false; false true; false false] |> BitMatrix
+   @test_throws ErrorException MedAg_attraction(X, Y, invalid_network)
+   @test_throws ErrorException InfAg_attraction(X, Z, invalid_network)
+
+   # Testing agent-agent attraction vs. Luzie's version
    @test attraction(o.X, o.AgAgNet) == AgAg_attraction(o.X, o.AgAgNet)
 
    # Convert media adj-matrix to a {-1, 1} vector representation expected by legacy code
