@@ -137,6 +137,13 @@ end
 function MedAg_attraction(X::T, M::T, B::BitMatrix) where {T<:AbstractVecOrMat}
     force = similar(X)
     # FIXME: Can be written even more compactly
+    
+    # Detect early if an agent is not connected to any Media Outlets
+    if !(any(B; dims=2) |> all)
+        throw(ErrorException("Model violation detected: An agent is disconnected " *
+        "from all media outlets."))
+    end
+
     for i = axes(X, 1)
         media_idx = findfirst(B[i, :])
         force[i, :] = M[media_idx, :] - X[i, :]
@@ -156,6 +163,13 @@ end
 
 function InfAg_attraction(X::T, Z::T, C::BitMatrix) where {T<:AbstractVecOrMat}
     force = similar(X)
+
+    # Detect early if an agent doesn't follow any influencers
+    if !(any(C; dims=2) |> all)
+        throw(ErrorException("Model violation detected: An Agent doesn't follow " *
+        "any influencers"))
+    end
+
     for i = axes(X, 1)
         # force[i, :] = sum(C[i, m] * (Z[m, :] - X[i, :]) for m = axes(C, 2)) # ./ sum(C[i, :])
         influencer_idx = findfirst(C[i, :])
@@ -182,29 +196,85 @@ end
 #     du = a * AgAg_attraction(u, A) + b * MedAg_attraction(u, M, B) + c * InfAg_attraction(u, Z, C)
 # end
 
+function follower_average(X::AbstractVecOrMat, Network::BitMatrix)
+    mass_centers = zeros(size(Network, 2), size(X, 2))
+
+    # Detect early if one outlet/influencer has lost all followers i.e a some column is empty
+    lonely_outlets = Int[]
+    if !(any(Network; dims=1) |> all)
+        # Exclude this index of the calculations and set zeros manually to the results
+        v = any(Network; dims=1) |> (collect ∘ vec) # Hack to force v into a Vector{bool}
+        append!(lonely_outlets, findall(!, v))
+    end
+
+    # Calculate centers of mass, excluding the outlets left alone to avoid div by zero
+    for m = setdiff(axes(Network, 2), lonely_outlets)
+        # Get the index of all the followers of m-th medium
+        ms_followers = Network[:, m] |> findall
+        # Store the col-wise average for the subset of X that contains the followers
+        mass_centers[m, :] = mean(X[ms_followers, :]; dims=1)
+    end
+
+    return mass_centers
+end
+
 function agent_drift(X::T, M::T, I::T, A::Bm, B::Bm, C::Bm,
-    p::OpinionModelParams) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
+    p::OpinionModelParams) where {T<:AbstractVecOrMat, Bm<:BitMatrix}
     a, b, c = p.a, p.b, p.c
     return a * AgAg_attraction(X, A) + b * MedAg_attraction(X, M, B) +
-        c * InfAg_attraction(X, I, C)
+           c * InfAg_attraction(X, I, C)
 end
 
-function media_drift(X::T, Y::T, B::BM; f::Function) where {T<:AbstractVecOrMat,
+function media_drift(X::T, Y::T, B::Bm; f=identity) where {T<:AbstractVecOrMat,
     Bm<:BitMatrix}
+    force = similar(Y)
+    x_tilde = follower_average(X, B)
+    force = f.(x_tilde .- Y)
 
-function influencer_drift(X::T, Z::T, C::Bm; g::Function) where {T<:AbstractVecOrMat,
-    Bm<:BitMatrix}
+    return force
 end
 
-function solve(omp::OpinionModelProblem; Nt = 100, dt=0.01)
+function influencer_drift(X::T, Z::T, C::Bm; g=identity) where {T<:AbstractVecOrMat,
+    Bm<:BitMatrix}
+    force = similar(Z)
+    x_hat = follower_average(X, C)
+    force = g.(x_hat .- Z)
+
+    return force
+end
+
+function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
     X, Y, Z, A, B, C = get_values(omp)
-    σ, n = omp.p.σ, omp.p.n
-    res_agents = similar(X, size(X, 1), size(X, 2), Nt)
+    σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
+    M, L = omp.p.M, omp.p.L
+    d = size(X, 2)
+    σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
+
+    # Allocating solutions & setting initial conditions
+    rX = similar(X, size(X, 1), size(X, 2), Nt)
+    rY = similar(Y, size(Y, 1), size(Y, 2), Nt)
+    rZ = similar(Z, size(Z, 1), size(Z, 2), Nt)
+
+    rX[:, :, begin] = X
+    rY[:, :, begin] = Y
+    rZ[:, :, begin] = Z
 
     # Solve with Euler-Maruyama
-    for i = axes(res_agents, 3)
-        F = agent_drift(X, Y, Z, A, B, C, omp.p)
-        res_agents[:, :, i] .= X + dt * F + sqrt(dt) * σ * rand(n, 2)
+    for i = 1:Nt-1
+        X, Y, Z = selectdim.([rX, rY, rZ], 3, i)
+        X_next, Y_next, Z_next = selectdim.([rX, rY, rZ], 3, i-1)
+
+        # Agents movement
+        FA = agent_drift(X, Y, Z, A, B, C, omp.p)
+        X_next =  X + dt * FA + σ * sqrt(dt) * randn(n, d)
+
+        # Media movements
+        FM = media_drift(X, Y, B)
+        Y_next = Y + (dt/Γ) * FM + (σ̃/Γ) * sqrt(dt) * randn(M, d)
+
+        # Influencer movements
+        FI = influencer_drift(X, Z, C)
+        Z_next = Z + (dt/γ) * FI + (σ̂/γ) * sqrt(dt) * randn(L, d)
     end
 
     return res_agents
