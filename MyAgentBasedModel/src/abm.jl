@@ -96,7 +96,11 @@ function OpinionModelProblem(dom::Vararg{Tuple{T,T},N};
     return OpinionModelProblem(p, X, M, I, AgInfNet, AgAgNet, AgMedNet)
 end
 
-function AgAg_attraction(X::AbstractVecOrMat{T}, A::BitMatrix; φ = x -> exp(-x)) where {T}
+function get_values(omp::OpinionModelProblem)
+    return omp.X, omp.M, omp.I, omp.AgAgNet, omp.AgMedNet, omp.AgInfNet
+end
+
+function AgAg_attraction(X::AbstractVecOrMat{T}, A::BitMatrix; φ=x -> exp(-x)) where {T}
     force = similar(X)
     for j = axes(force, 1)
         neighboors = findall(A[j, :])
@@ -125,15 +129,17 @@ Calculate the force of attraction on agents exerted by other agents they are
 connected to, as determined by `AgAgNet`, the adjacency matrix.
 """
 # function AgAg_attraction(X, AgAgNet; φ::Function = x -> exp(-x))
-function AgAg_attraction(omp::OpinionModelProblem{T}; φ = x -> exp(-x)) where {T}
+function AgAg_attraction(omp::OpinionModelProblem{T}; φ=x -> exp(-x)) where {T}
     X, A = omp.X, omp.AgAgNet
     return AgAg_attraction(X, A)
 end
 
 function MedAg_attraction(X::T, M::T, B::BitMatrix) where {T<:AbstractVecOrMat}
     force = similar(X)
-    for i = axes(force, 1)
-        force[i, :] = sum(B[i, m] * (M[m, :] - X[i, :]) for m = axes(B, 2)) ./ sum(B[i, :])
+    # FIXME: Can be written even more compactly
+    for i = axes(X, 1)
+        media_idx = findfirst(B[i, :])
+        force[i, :] = M[media_idx, :] - X[i, :]
     end
 
     return force
@@ -150,8 +156,10 @@ end
 
 function InfAg_attraction(X::T, Z::T, C::BitMatrix) where {T<:AbstractVecOrMat}
     force = similar(X)
-    for i = axes(force, 1)
-        force[i, :] = sum(C[i, m] * (Z[m, :] - X[i, :]) for m = axes(C, 2)) ./ sum(C[i, :])
+    for i = axes(X, 1)
+        # force[i, :] = sum(C[i, m] * (Z[m, :] - X[i, :]) for m = axes(C, 2)) # ./ sum(C[i, :])
+        influencer_idx = findfirst(C[i, :])
+        force[i, :] = Z[influencer_idx, :] - X[i, :]
     end
 
     return force
@@ -160,16 +168,44 @@ end
 """
     InfAg_attraction(omp::OpinionModelProblem)
 
-Calcultates the Influencer-Aagent attraction force for all agents.
+Calcultates the Influencer-Agent attraction force for all agents.
 """
 function InfAg_attraction(omp::OpinionModelProblem)
     X, Z, C = omp.X, omp.I, omp.AgInfNet
     return InfAg_attraction(X, Z, C)
 end
 
-function agent_force!(du, u, p, t)
-    a, b, c = p.p.a, p.p.b, p.p.c
-    A, B, C = p.AgAgNet, p.AgInfNet, p.AgMedNet
-    M, Z = p.M, p.I
-    du = a * AgAg_attraction(u, A) + b * MedAg_attraction(u, M, B) + c * InfAg_attraction(u, Z, C)
+# function agent_force!(du, u, p, t)
+#     a, b, c = p.p.a, p.p.b, p.p.c
+#     A, B, C = p.AgAgNet, p.AgInfNet, p.AgMedNet
+#     M, Z = p.M, p.I
+#     du = a * AgAg_attraction(u, A) + b * MedAg_attraction(u, M, B) + c * InfAg_attraction(u, Z, C)
+# end
+
+function agent_drift(X::T, M::T, I::T, A::Bm, B::Bm, C::Bm,
+    p::OpinionModelParams) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
+    a, b, c = p.a, p.b, p.c
+    return a * AgAg_attraction(X, A) + b * MedAg_attraction(X, M, B) +
+        c * InfAg_attraction(X, I, C)
+end
+
+function media_drift(X::T, Y::T, B::BM; f::Function) where {T<:AbstractVecOrMat,
+    Bm<:BitMatrix}
+
+function influencer_drift(X::T, Z::T, C::Bm; g::Function) where {T<:AbstractVecOrMat,
+    Bm<:BitMatrix}
+end
+
+function solve(omp::OpinionModelProblem; Nt = 100, dt=0.01)
+    X, Y, Z, A, B, C = get_values(omp)
+    σ, n = omp.p.σ, omp.p.n
+    res_agents = similar(X, size(X, 1), size(X, 2), Nt)
+
+    # Solve with Euler-Maruyama
+    for i = axes(res_agents, 3)
+        F = agent_drift(X, Y, Z, A, B, C, omp.p)
+        res_agents[:, :, i] .= X + dt * F + sqrt(dt) * σ * rand(n, 2)
+    end
+
+    return res_agents
 end

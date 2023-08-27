@@ -1,4 +1,3 @@
-
 using Statistics, Random
 
 
@@ -93,16 +92,17 @@ end
     _media_network(n::Int, M::Int)
 
 Returns the adjacency matrix of `n` agents to `M` media outlets such that each
-agent is connected to at least one media outlet, possible more.
+agent is connected to exactly one media outlet.
 """
-function _media_network(n, M)
-    C = rand([true, false], n, M)
-    spots_failing = findall(all(.!c) for c = eachrow(C))
-    fix_index = rand(1:M, length(spots_failing))
+function _media_network(n, M)::BitMatrix
+    # Fill a vector with `n` powers of 2
+    powers_of_2 = rand([2^i for i = 0:M-1], n)
+    C = BitMatrix(undef, (n, M))
 
-    for (row, fix_col) = zip(axes(C, 1), fix_index)
-        C[row, fix_col] .= true
+    for (pow, c_row) in zip(powers_of_2, eachrow(C))
+        # Get the binary representation of 2^i and store it in a row of C
+        digits!(c_row, pow; base=2) 
     end
 
-    return C |> BitMatrix
+    return C
 end

@@ -12,7 +12,8 @@ export
     OpinionModelParams,
     AgAg_attraction,
     InfAg_attraction,
-    MedAg_attraction
+    MedAg_attraction,
+    solve
 
 include("utils.jl")
 include("abm.jl")

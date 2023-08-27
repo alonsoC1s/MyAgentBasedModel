@@ -4,7 +4,8 @@ using MyAgentBasedModel, Test
 include("../../Numerics4/src/abm.jl")
 import
     MyAgentBasedModel._orthantize,
-    MyAgentBasedModel._place_influencers
+    MyAgentBasedModel._place_influencers,
+    MyAgentBasedModel._media_network
 
 @testset "Tests for auxiliary functions" begin
     ## 1-d test
@@ -98,11 +99,28 @@ import
 
     @test I == I_expected
     # TODO: Add one more randomized test
+
+    # Media network
+    # Check if every single row has at least 1 true by summing along rows, and converting to bools
+    M = _media_network(1000, 2)
+    @test all(sum(M; dims=2) |> BitMatrix)
+
+    M = _media_network(1000, 4)
+    @test all(sum(M; dims=2) |> BitMatrix)
 end
 
 @testset "Main functionality" begin
    o = OpinionModelProblem((-2, 2), (-2, 2))
+   a, b, c, n, L = o.p.a, o.p.b, o.p.c, o.p.n, o.p.L
+   X, Y, Z = o.X, o.M, o.I
+   A, B, C = o.AgAgNet, o.AgMedNet, o.AgInfNet
 
    @test attraction(o.X, o.AgAgNet) == AgAg_attraction(o.X, o.AgAgNet)
+
+   # Convert media adj-matrix to a {-1, 1} vector representation expected by legacy code
+   state = (findfirst.(eachrow(B)) .== 2) |> Vector
+   @test influence(X, Y, Z, C, state, (0, (n=n, b=b, c=c, L=L))) == c * MedAg_attraction(X, Y, B) +
+        b * InfAg_attraction(X, Z, C)
+
 end
 end
