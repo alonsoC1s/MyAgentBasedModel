@@ -1,4 +1,3 @@
-using LinearAlgebra
 using StatsBase
 using Random
 # using JLD2
@@ -195,6 +194,7 @@ function ABMsolve(NT=100; p=ABMconstruct(), q=parameters(), init="4inf", chosens
                 masscenter[i, :] = sum(FolInfNet[:, i] .* xold, dims=1) / sum(FolInfNet[:, i])
                 inf[i, :] = inf[i, :] + dt / frictionI * (masscenter[i, :] - inf[i, :]) + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
             else
+                # FIXME: Should `infold` be on the rhs? Or, shouldn't inf[i+1, :] be?
                 inf[i, :] = inf[i, :] + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
             end
         end
@@ -203,11 +203,23 @@ function ABMsolve(NT=100; p=ABMconstruct(), q=parameters(), init="4inf", chosens
         masscenter = zeros(M, 2)
         states = [-1, 1]
         for i in 1:M
+            # FIXME: Why split into 2 cases, one where there's an agent follows
+            # more than 1 media outlet? This is: either, unnecessary as the
+            # problem explicitly assumes each agent follows 1 and only 1
+            # media/influencer _or_, this makes the calculation of `influence`
+            # incorrect, as that function assumes only 1 connection.
+            # On revision: This is checking over the media companies, not
+            # agents. It is possible for media/influencers to be left without
+            # followers.
             xM = findall(x -> x == states[i], state)
             if size(xM, 1) > 0
                 masscenter[i, :] = sum(xold[xM, :], dims=1) / size(xM, 1)
-                media[i, :] = media[i, :] + dt / frictionM * (masscenter[i, :] - media[i, :]) + 1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)
+                # FIXME: Should "media old" be on the rhs??
+                media[i, :] = media[i, :] + dt / frictionM * 
+                    (masscenter[i, :] - media[i, :]) + 
+                    1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)
             else
+                # FIXME: Should "media old" be on the rhs??
                 media[i, :] = media[i, :] + 1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)
             end
         end
