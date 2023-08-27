@@ -137,11 +137,11 @@ end
 function MedAg_attraction(X::T, M::T, B::BitMatrix) where {T<:AbstractVecOrMat}
     force = similar(X)
     # FIXME: Can be written even more compactly
-    
+
     # Detect early if an agent is not connected to any Media Outlets
     if !(any(B; dims=2) |> all)
         throw(ErrorException("Model violation detected: An agent is disconnected " *
-        "from all media outlets."))
+                             "from all media outlets."))
     end
 
     for i = axes(X, 1)
@@ -167,7 +167,7 @@ function InfAg_attraction(X::T, Z::T, C::BitMatrix) where {T<:AbstractVecOrMat}
     # Detect early if an agent doesn't follow any influencers
     if !(any(C; dims=2) |> all)
         throw(ErrorException("Model violation detected: An Agent doesn't follow " *
-        "any influencers"))
+                             "any influencers"))
     end
 
     for i = axes(X, 1)
@@ -219,7 +219,7 @@ function follower_average(X::AbstractVecOrMat, Network::BitMatrix)
 end
 
 function agent_drift(X::T, M::T, I::T, A::Bm, B::Bm, C::Bm,
-    p::OpinionModelParams) where {T<:AbstractVecOrMat, Bm<:BitMatrix}
+    p::OpinionModelParams) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
     a, b, c = p.a, p.b, p.c
     return a * AgAg_attraction(X, A) + b * MedAg_attraction(X, M, B) +
            c * InfAg_attraction(X, I, C)
@@ -251,9 +251,9 @@ function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
     σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
 
     # Allocating solutions & setting initial conditions
-    rX = similar(X, size(X, 1), size(X, 2), Nt)
-    rY = similar(Y, size(Y, 1), size(Y, 2), Nt)
-    rZ = similar(Z, size(Z, 1), size(Z, 2), Nt)
+    rX = zeros(size(X, 1), size(X, 2), Nt)
+    rY = zeros(size(Y, 1), size(Y, 2), Nt)
+    rZ = zeros(size(Z, 1), size(Z, 2), Nt)
 
     rX[:, :, begin] = X
     rY[:, :, begin] = Y
@@ -261,21 +261,41 @@ function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
 
     # Solve with Euler-Maruyama
     for i = 1:Nt-1
-        X, Y, Z = selectdim.([rX, rY, rZ], 3, i)
-        X_next, Y_next, Z_next = selectdim.([rX, rY, rZ], 3, i-1)
+        # X, Y, Z = selectdim.([rX, rY, rZ], 3, i)
+        # X_next, Y_next, Z_next = selectdim.([rX, rY, rZ], 3, i + 1)
+        # X, X_next = selectdim(rX, 3, i), selectdim(rX, 3, i+1)
+        # Y, Y_next = selectdim(rY, 3, i), selectdim(rY, 3, i+1)
+        # Z, Z_next = selectdim(rZ, 3, i), selectdim(rZ, 3, i+1)
+
+        X = rX[:, :, i]
+        Y = rY[:, :, i]
+        Z = rZ[:, :, i]
+
+        # Agents movement
+        # FA = agent_drift(X, Y, Z, A, B, C, omp.p)
+        # X_next .= X + dt * FA + σ * sqrt(dt) * randn(n, d)
+
+        # # Media movements
+        # FM = media_drift(X, Y, B)
+        # Y_next .= Y + (dt / Γ) * FM + (σ̃ / Γ) * sqrt(dt) * randn(M, d)
+
+        # # Influencer movements
+        # FI = influencer_drift(X, Z, C)
+        # Z_next .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)
-        X_next =  X + dt * FA + σ * sqrt(dt) * randn(n, d)
+        rX[:, :, i+1] .= X + dt * FA + σ * sqrt(dt) * randn(n, d)
 
         # Media movements
         FM = media_drift(X, Y, B)
-        Y_next = Y + (dt/Γ) * FM + (σ̃/Γ) * sqrt(dt) * randn(M, d)
+        rY[:, :, i+1] .= Y + (dt / Γ) * FM + (σ̃ / Γ) * sqrt(dt) * randn(M, d)
 
         # Influencer movements
         FI = influencer_drift(X, Z, C)
-        Z_next = Z + (dt/γ) * FI + (σ̂/γ) * sqrt(dt) * randn(L, d)
+        rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
+
     end
 
-    return res_agents
+    return rX
 end
