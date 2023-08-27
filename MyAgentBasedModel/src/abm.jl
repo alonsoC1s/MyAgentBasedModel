@@ -261,27 +261,9 @@ function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
 
     # Solve with Euler-Maruyama
     for i = 1:Nt-1
-        # X, Y, Z = selectdim.([rX, rY, rZ], 3, i)
-        # X_next, Y_next, Z_next = selectdim.([rX, rY, rZ], 3, i + 1)
-        # X, X_next = selectdim(rX, 3, i), selectdim(rX, 3, i+1)
-        # Y, Y_next = selectdim(rY, 3, i), selectdim(rY, 3, i+1)
-        # Z, Z_next = selectdim(rZ, 3, i), selectdim(rZ, 3, i+1)
-
         X = rX[:, :, i]
         Y = rY[:, :, i]
         Z = rZ[:, :, i]
-
-        # Agents movement
-        # FA = agent_drift(X, Y, Z, A, B, C, omp.p)
-        # X_next .= X + dt * FA + σ * sqrt(dt) * randn(n, d)
-
-        # # Media movements
-        # FM = media_drift(X, Y, B)
-        # Y_next .= Y + (dt / Γ) * FM + (σ̃ / Γ) * sqrt(dt) * randn(M, d)
-
-        # # Influencer movements
-        # FI = influencer_drift(X, Z, C)
-        # Z_next .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)
