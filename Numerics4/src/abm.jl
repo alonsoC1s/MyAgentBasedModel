@@ -78,21 +78,20 @@ function influence(x, media, inf, FolInfNet, state, (p, q))
     force1 = zeros(size(x))
     force2 = zeros(size(x))
     for j in 1:n
-        # if state == 1 the j-th agent is connected to Media outlet 1
-        # NOTE: Apparently this is not normalized by dividing over the sum(B)
         if state[j] == 1
             force1[j, :] = media[2, :] - x[j, :]
         else
             force1[j, :] = media[1, :] - x[j, :]
         end
 
-        # NOTE: Apparently this is not normalized by dividing over the sum(C)
         for k in 1:L
             if FolInfNet[j, k] == 1
                 force2[j, :] = inf[k, :] - x[j, :]
             end
         end
     end
+    
+    # FIXME: Are the parameters switched around? b corresponds to media & c to influencers
     force = c * force1 + b * force2
     return force
 end
