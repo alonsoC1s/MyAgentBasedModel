@@ -102,6 +102,7 @@ import
 
     # Media network
     # Check if every single row has at least 1 true by summing along rows, and converting to bools
+    # FIXME: Use `findall` & check size instead of relying on all(sum(⋅))
     M = _media_network(1000, 2)
     @test all(sum(M; dims=2) |> BitMatrix)
 

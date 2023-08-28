@@ -1,3 +1,6 @@
+using LinearAlgebra
+using Distributions:DiscreteNonParametric
+
 """
     OpinionModelParams
 
@@ -171,7 +174,7 @@ function InfAg_attraction(X::T, Z::T, C::BitMatrix) where {T<:AbstractVecOrMat}
     end
 
     for i = axes(X, 1)
-        # force[i, :] = sum(C[i, m] * (Z[m, :] - X[i, :]) for m = axes(C, 2)) # ./ sum(C[i, :])
+        # force[i, :] = sum(C[i, m] * (Z[m, :] - X[i, :]) for m = axes(C, 2)) # ./ count(C[i, :])
         influencer_idx = findfirst(C[i, :])
         force[i, :] = Z[influencer_idx, :] - X[i, :]
     end
@@ -243,7 +246,52 @@ function influencer_drift(X::T, Z::T, C::Bm; g=identity) where {T<:AbstractVecOr
     return force
 end
 
-function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
+"""
+    rates(B, C)
+
+Calculates the rate of individuals that follow both the `m`-th media outlet and
+the `l`-th influencer. The `m,l`-th entry of the output corresponds to the
+proportion of agents that follows `m` and `l`.
+
+# Arguments:
+- `B::BitMatrix`: Adjacency matrix of the agents to the media outlets
+- `C::BitMatrix`: Adjacency matrix of the agents to the influencers
+"""
+function rates(B::BitMatrix, C::BitMatrix)
+    n, M = size(B)
+    L = size(C, 2)
+
+    R = zeros(M, L)
+    for m = 1:M
+        audience_m = findall(B[:, m])
+        R[m, :] = count(C[audience_m, :]; dims=1) ./ n
+    end
+    
+    return R
+end
+
+
+function change_influencer(X::T, Z::T, B::Bm, C::Bm, η; ψ=x -> exp(-x), r=relu) where
+    {T<:AbstractVecOrMat, Bm<:BitMatrix}
+
+    # Compute the followership rate for media and influencers
+    rate_m_l = rates(B, C)
+    # attractiveness is the total proportion of followers per influencer
+    # Divide each col of rates over sum(n_(m, l) for m = 1:M)
+    attractiveness = rate_m_l ./ sum(rate_m_l; dims=1)
+    
+    # Computing distances of each individual to the influencers
+    D = zeros(size(X, 1), size(Z, 1))
+    for (i, agent_i) = pairs(eachrow(X))
+        for (l, influencer_l) = pairs(eachrow(Z))
+            D[i, l] = ψ(norm(agent_i - influencer_l))
+        end
+    end
+
+    return η .* D * r.(attractiveness')
+end
+
+function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -251,9 +299,9 @@ function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
     σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
 
     # Allocating solutions & setting initial conditions
-    rX = zeros(size(X, 1), size(X, 2), Nt)
-    rY = zeros(size(Y, 1), size(Y, 2), Nt)
-    rZ = zeros(size(Z, 1), size(Z, 2), Nt)
+    rX = zeros(T, n, d, Nt)
+    rY = zeros(T, M, d, Nt)
+    rZ = zeros(T, L, d, Nt)
 
     rX[:, :, begin] = X
     rY[:, :, begin] = Y
@@ -261,9 +309,7 @@ function solve(omp::OpinionModelProblem; Nt=100, dt=0.01)
 
     # Solve with Euler-Maruyama
     for i = 1:Nt-1
-        X = rX[:, :, i]
-        Y = rY[:, :, i]
-        Z = rZ[:, :, i]
+        X = rX[:, :, i], Y = rY[:, :, i], Z = rZ[:, :, i]
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)

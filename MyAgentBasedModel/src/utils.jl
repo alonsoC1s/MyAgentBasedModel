@@ -103,8 +103,12 @@ function _media_network(n, M)::BitMatrix
 
     for (pow, c_row) in zip(powers_of_2, eachrow(C))
         # Get the binary representation of 2^i and store it in a row of C
-        digits!(c_row, pow; base=2) 
+        digits!(c_row, pow; base=2)
     end
 
     return C
+end
+
+function relu(x)
+    return max(0.1, -1 + 2 * x)
 end
