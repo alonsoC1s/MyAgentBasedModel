@@ -1,5 +1,6 @@
 using StatsBase
 using Random
+using LinearAlgebra
 # using JLD2
 
 include("setting.jl")
@@ -102,8 +103,17 @@ function changeinfluencer(state, x, FolInfNet, inf, (p, q))
     theta = 0.1 # threshold for r-function
 
     # compute structural similiarity = fraction of followers with same state
+    # FIXME: This does not result in the % of agents that follow each
+    # influencer. Since the entries of state are either -1 or 1, the elements
+    # will cancel each other out depending on the structure of FolInfNet. The
+    # resulting sum(FolInfNet[:, i] .* state) is not the number of followers of
+    # the i-th influencer, as this value can sometimes be negative. The division
+    # constant is correct, but the fact remains.
+    # This fact is also apparent since sum(fraction) is almost never exatly
+    # equal to 1, which is what we would expect from fractions of a total.
     fraction = zeros(L)
     for i = 1:L
+        # TODO: For media = -1, fraction[m] will be negative, because state[j] is either -1 or 1
         fraction[i] = sum(FolInfNet[:, i] .* state) / sum(FolInfNet[:, i])
     end
 
@@ -121,15 +131,19 @@ function changeinfluencer(state, x, FolInfNet, inf, (p, q))
     for j = 1:n
         for i = 1:L
             g2 = state[j] * fraction[i]
+            # The `if` emulates relu(x) = max(0.1, -1 + 2*x)
             if g2 < theta
                 g2 = theta
             end
             attractive[j, i] = eta * dist[j, i] * g2
         end
 
+        # Select some new influencer index k randomly with probabilities from up.
         r = rand()
         lambda = sum(attractive[j, :])
+        # !(isapprox(lambda, 1.0)) && @error "lambda should not be ≠ 1.0!"
         if r < 1 - exp(-lambda * dt)
+            # Is this to normalize `attractive` so the rows actually sum up to 1??
             p = attractive[j, :] / lambda
             r2 = rand()
             k = 1
@@ -232,6 +246,7 @@ function ABMsolve(NT=100; p=ABMconstruct(), q=parameters(), init="4inf", chosens
         # individual may jump from one influencer to another
         # jumps according to rate model
         FolInfNet = changeinfluencer(state, xold, FolInfNet, infold, (p, q))
+        break
 
         xs = push!(xs, copy(x))
         infs = push!(infs, copy(inf))
