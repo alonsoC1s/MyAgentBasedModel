@@ -1,0 +1,245 @@
+---
+title: question and comments
+execute: 
+  eval: false
+jupyter: julia-1.9
+---
+
+# `influence` function
+
+I suspect the parameters $b$ and $c$, corresponding to the attractive forces for
+agent-media and agent-influencer interactions might be switched in the code. i.e
+$b$ is used for influencers and $c$ for media. The code used to run the
+experiments on the papers looks like this (with some minor modifications for
+brevity):
+
+```{julia}
+function influence(x, media, inf, FolInfNet, state, (p, q))
+    (; n, b, c, L) = q
+    force1, force2 = zeros(size(x)), zeros(size(X))
+    for j in 1:n
+        if state[j] == 1                            # <1>
+            force1[j, :] = media[2, :] - x[j, :]    # <1>
+        else                                        # <1>
+            force1[j, :] = media[1, :] - x[j, :]    # <1> 
+        end                                         # <1>
+
+        for k in 1:L
+            if FolInfNet[j, k] == 1
+                force2[j, :] = inf[k, :] - x[j, :]
+            end
+        end
+    end
+    force = c * force1 + b * force2     # <2>
+    return force
+end
+```
+1. Calculate the forces resulting from media outlets and stores it in `force1`.
+2. When calculating the total forces, `force1` is multiplied by `c`, which is
+    the influencer constant.
+
+# Integration procedure
+
+When doing the Euler-Maruyama integration procedure, in particular for the media
+outlets and influencers, I suspect that there is an indexing issue that updates
+the variables at time $t$ instead of defining new ones at time $t+1$ as a
+function of the previous state.
+
+In other words, instead of doing
+
+$$
+    X_{t+1} \leftarrow f(X_{t})
+$$
+
+the following is happening
+
+$$
+    X_{t} \leftarrow f(X_{t})
+$$
+
+This can be seen by examining the following exceprt from the function
+`ABMsolve`. This integration considers two cases.[^1]
+
+[^1]: More comments on this later, as it might be another issue.
+
+```{julia}
+masscenter = zeros(M, 2)
+states = [-1, 1]
+for i in 1:M
+    xM = findall(x -> x == states[i], state)
+    if size(xM, 1) > 0
+        masscenter[i, :] = sum(xold[xM, :], dims=1) / size(xM, 1)
+        media[i, :] = media[i, :] + dt / frictionM * 
+            (masscenter[i, :] - media[i, :]) +                          # <1>
+                1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)     # <1>
+    else
+        # FIXME: Should "media old" be on the rhs??
+        media[i, :] = media[i, :] + 1 / frictionM *                     # <2>
+                sqrt(dt) * sigmatilde * randn(2, 1)                     # <2>
+    end
+end
+```
+
+1. In the case where the media outlet still has some followership, the update
+rule is written as `media[i, :] = media[i, :] + ...`. I believe the left hand
+side should be `media[i+1, :]`.
+2. The same update rule as in 1 is used, only this time the drift function is
+assumed to be identically 1.
+
+## Expanding on the footnote
+
+As mentioned previously, the Euler--Maruyama step considers two cases for both
+the media and influencers. The first where the influencing agent (influencer of
+media) has a non-empty set of followers, and, the case where the influencing
+agent has lost all followership.
+
+This makes sense to me from an implementation perspective, since the follower's
+center of mass ($\tilde{x}, \hat{x}$ respectively) are not well defined when
+there are no followers. I noticed this case is not discussed in the paper. The
+equation used in the paper to describe the movement of media agents (to give an
+example, but its identical to the influencer case) is:
+
+$$
+    \Gamma dy_m = f(\tilde{x}_{m}(t) - y_{m}(t)) dt + \tilde{\sigma} dW_{m}(t)
+$$
+
+By the way this is handled in the code, I understand you assume that $f \equiv
+1$. I think it would make more sense that the drift force $f$ in this case be 0.
+I suggested a small clarification be added in the paper to Dr. Conrad.
+
+# Influencer switching algorithm
+
+Finally, I have reason to believe the influencer switching function might be
+wrong. I will annotate the code with short comments and then expand on those one
+by one.
+
+First, a small refresher on the goal of the computation. The rate of change to
+influencer $l$ of individual $x$ that follows medium $m$, denoted by $\Lambda$
+is defined as:
+
+$$
+    \Lambda_{m}^{\to l} (x, t) = \eta \, \psi\left(|z_{l} - x|\right) \, r\left( \frac{n_{m,l}(t)}{\sum_{m'=1}^{M} n_{m', l}(t)} \right).
+$$
+
+where,
+1. $\eta$ is a given constant
+2. $\psi(x) = exp(-x)$
+3. $n{m,l}$ is the proportion of agents that follow _both_ media $m$ and influencer $l$.
+
+The code that calculates this rate (skipping the switching part) is below.
+
+```{julia}
+function changeinfluencer(state, x, FolInfNet, inf, (p, q))
+    (; eta, n, L) = q
+    dt = p.dt
+
+    theta = 0.1 # threshold for r-function
+
+    fraction = zeros(L)
+    for i = 1:L
+        fraction[i] = sum(FolInfNet[:, i] .* state) / sum(FolInfNet[:, i]) # <1>
+    end
+
+    # compute distance of followers to influencers
+    dist = zeros(n, L)
+    for i = 1:L
+        for j = 1:n
+            d = x[j, :] - inf[i, :]
+            dist[j, i] = exp(-sqrt(d[1]^2 + d[2]^2))
+        end
+    end
+
+    # compute attractiveness of influencer for followers
+    attractive = zeros(n, L)
+    for j = 1:n
+        for i = 1:L
+            g2 = state[j] * fraction[i]                                    # <2>
+            if g2 < theta
+                g2 = theta
+            end
+            attractive[j, i] = eta * dist[j, i] * g2
+        end
+    end
+
+    #
+    ## SWITCHING PROCEDURE EXCLUDED
+    #
+
+    return FolInfNet
+end
+```
+1. The followership ratio per influencer is calculated incorrectly.
+2. `g2` is also calculated incorrectly.
+
+In both cases an important thing to consider is that fact that in this
+implementation, the `state` variable is a 1-d vector of length $n$ where each
+entry _is either 1 or -1_. If the $i$-th entry equals 1, the $i$-th agent
+follows media 2, and if it equals -1, the agent follows media 1.
+
+It is important to keep in mind how this differs from an adjacency matrix.
+
+## Annotation 1
+
+The followership ratio per influencer is calculated as (changing the index variables for clarity)
+
+```{julia}
+fraction[l] = sum(FolInfNet[:, l] .* state) / sum(FolInfNet[:, l])
+```
+
+Julia allows this to be written in such a way that the dimensions and indices
+become a bit clearer.
+
+```{julia}
+fraction[l] = sum(FolInfNet[i, l] .* state for i = 1:n) ./ sum(FolInfNet[i, l] for i = 1:n)
+```
+
+The index `i` ranges from 1 to `n` since `FolInfNet` (or matrix $C$ in the
+original paper's notation) is an $n \times L$ adjacency matrix.
+
+The calculation of the $i$-th entry of vector `fraction` can be written in
+symbolic terms as
+
+$$
+    \mathtt{fraction}_l = \left[ \sum_{i=1}^{n} C_{i,l} \cdot \mathtt{state}_i \right] / \sum_{i=1}^{n} C_{i,l}.
+$$
+
+Where $C$ is an $n \times L$ adjacency matrix of the relationship between agents
+and influencers.
+
+I suspect the intention on the numerator was to get the total number of
+followers of influencer $l$ by adding up "ones" where the adjacency matrix = 1
+and $1 \cdot 0$ where the adjacency matrix is 0 (and therefore the agent is not
+connected to that influencer). The problem is, since `state` can either be 1 or
+-1 depending on which media outlet the agent follows, this is in fact a random
+sum of +1 and -1, cancelling out randomly, which has no resemblance to the
+desired ratio of followers per influencer. The denominator is calculated
+correctly.
+
+This is also apparent by the fact that `fraction` often contains negative
+entries, which is of course inconsistent with the interpretation as proportions,
+and the fact that all of the entries of fraction almost never sum up to 1, which
+is what we would expect from fractions of a total.
+
+For the next part, we assume that `fraction_l` does in fact correspond to
+$\sum_{m'=1}^{M} n_{m', l}$, the intended result.
+
+## Annotation II
+
+By it's use on the line `attractive[j, i] = eta * dist[j, i] * g2` I assume that the variable `g2` is a symbol for the expression $r\left( \frac{n_{m,l}}{\sum_{m'=1}^{M} n_{m',l} } \right)$.
+
+However, as defined, `g2` would be
+
+$$
+    \mathtt{g2} = \mathtt{state}_j \left( \sum_{m'=1}^{M} n_{m', l} \right).
+$$
+
+But once again, `state` is not the adjacency matrix, in contrast to the original
+notation in the paper, which uses $B$. Even if it were, the meaning of
+`state[j]` is not really clear, since $B$ is an $n \times M$ matrix and `state`
+is an $n$-vector. In other words, we would be missing an index to determine the
+correspondance between `state` at index $j$ and $B$ at "index" $j$.
+
+I wan't able to understand why `g2` plays the role of the recommendation
+function. The following `if` statement is clear to me, it acts similar to the
+relu function, but I still wasn't able to see why `g2` is being used as it is.
+Am I missing something?
