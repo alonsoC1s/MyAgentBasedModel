@@ -1,5 +1,5 @@
 using LinearAlgebra
-using Distributions:DiscreteNonParametric
+using Distributions
 
 """
     OpinionModelParams
@@ -247,7 +247,7 @@ function influencer_drift(X::T, Z::T, C::Bm; g=identity) where {T<:AbstractVecOr
 end
 
 """
-    rates(B, C)
+    followership_ratings(B, C)
 
 Calculates the rate of individuals that follow both the `m`-th media outlet and
 the `l`-th influencer. The `m,l`-th entry of the output corresponds to the
@@ -257,7 +257,7 @@ proportion of agents that follows `m` and `l`.
 - `B::BitMatrix`: Adjacency matrix of the agents to the media outlets
 - `C::BitMatrix`: Adjacency matrix of the agents to the influencers
 """
-function rates(B::BitMatrix, C::BitMatrix)
+function followership_ratings(B::BitMatrix, C::BitMatrix)
     n, M = size(B)
     L = size(C, 2)
 
@@ -266,20 +266,21 @@ function rates(B::BitMatrix, C::BitMatrix)
         audience_m = findall(B[:, m])
         R[m, :] = count(C[audience_m, :]; dims=1) ./ n
     end
-    
+
     return R
 end
 
 
-function change_influencer(X::T, Z::T, B::Bm, C::Bm, η; ψ=x -> exp(-x), r=relu) where
-    {T<:AbstractVecOrMat, Bm<:BitMatrix}
+function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
+    ψ=x -> exp(-x), r=relu) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
 
     # Compute the followership rate for media and influencers
-    rate_m_l = rates(B, C)
+    rate_m_l = followership_ratings(B, C)
     # attractiveness is the total proportion of followers per influencer
     # Divide each col of rates over sum(n_(m, l) for m = 1:M)
-    attractiveness = rate_m_l ./ sum(rate_m_l; dims=1)
-    
+    # FIXME: Rename as structural similarity
+    struct_similarity = rate_m_l ./ sum(rate_m_l; dims=1)
+
     # Computing distances of each individual to the influencers
     D = zeros(size(X, 1), size(Z, 1))
     for (i, agent_i) = pairs(eachrow(X))
@@ -288,8 +289,35 @@ function change_influencer(X::T, Z::T, B::Bm, C::Bm, η; ψ=x -> exp(-x), r=relu
         end
     end
 
-    return η .* D * r.(attractiveness')
+    # Calculating switching rate based on eq. (6)
+    R = zeros(size(X, 1), size(Z, 1))
+    for (j, agentj_media) = pairs(eachrow(B))
+        m = findfirst(agentj_media)
+        R[j, :] = η * D[j, :] .* r.(struct_similarity[m, :])
+    end
+
+    return R
 end
+
+function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η) where {Bm<:BitMatrix,
+    T<:AbstractVecOrMat}
+    rates = influencer_switch_rates(X, Z, B, C, η)
+    RC = similar(C)
+    L = size(Z, 1)
+
+    choices = [I(L)[:, i] |> BitVector for i = 1:L]
+
+    for j = axes(X, 1)
+        dc = DiscreteNonParametric(1:L, rates[j, :] ./ sum(rates[j, :]))
+        new_influencer_idx = rand(dc)
+        new_influencer_idx != findfirst(C[j, :]) && @info "agent $(j) switched from influencer $(findfirst(C[j, :])) to $(new_influencer_idx)"
+        RC[j, :] = choices[new_influencer_idx]
+    end
+
+    return RC
+end
+
+# TODO: test
 
 function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
     X, Y, Z, A, B, C = get_values(omp)
@@ -297,19 +325,24 @@ function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
     M, L = omp.p.M, omp.p.L
     d = size(X, 2)
     σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
+    η = omp.p.η
 
     # Allocating solutions & setting initial conditions
     rX = zeros(T, n, d, Nt)
     rY = zeros(T, M, d, Nt)
     rZ = zeros(T, L, d, Nt)
+    rC = zeros(Bool, n, L, Nt)
 
     rX[:, :, begin] = X
     rY[:, :, begin] = Y
     rZ[:, :, begin] = Z
+    rC[:, :, begin] = C
 
     # Solve with Euler-Maruyama
     for i = 1:Nt-1
-        X = rX[:, :, i], Y = rY[:, :, i], Z = rZ[:, :, i]
+        X = view(rX, :, :, i)
+        Y = view(rY, :, :, i)
+        Z = view(rZ, :, :, i)
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)
@@ -323,7 +356,10 @@ function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
         FI = influencer_drift(X, Z, C)
         rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
+        # Change influencers
+        view(rC, :, :, i+1) .= switch_influencer(C, X, Z, B, η)
+
     end
 
-    return rX
+    return rX, rY, rZ, rC
 end

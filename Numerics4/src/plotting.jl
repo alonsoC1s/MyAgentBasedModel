@@ -219,7 +219,7 @@ function ABMplotsingle(centers, inf, media, state, stateinf, (p,q); title = "", 
         subp=plot(leg=false, title = title)
     end
     if color_agents==false
-        scatter!(subp, centers[:,1], centers[:,2], markercolor=color_noinf,markersize=size_individuals, markerstrokewidth=0.5)
+        scatter!(subp, centers[:,1], centers[:,2], markercolor=color_oinf,markersize=size_individuals, markerstrokewidth=0.5)
     else
         states = [-1 1]
         for j in 1:L
