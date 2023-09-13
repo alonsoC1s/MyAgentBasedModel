@@ -1,0 +1,1 @@
+Documentation for the implementation of Agent Based Model of Opinion Dynamics
