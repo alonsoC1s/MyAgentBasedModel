@@ -307,7 +307,7 @@ end
 
 Returns an n × L matrix where the `j,l`-th entry contains the rate λ of the
 Poisson point process modeling how agent `j` switches influencers to `l`. Note
-that this is not the same as $\Lambda_{m}^{\to l}$.
+that this is not the same as ``Λ_{m}^{→l}``.
 """
 function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
     ψ=x -> exp(-x), r=relu) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
