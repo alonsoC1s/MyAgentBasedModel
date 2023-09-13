@@ -1,5 +1,4 @@
-using LinearAlgebra
-using Distributions
+using LinearAlgebra, Distributions, Plots
 
 """
     OpinionModelParams
@@ -278,7 +277,6 @@ function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
     rate_m_l = followership_ratings(B, C)
     # attractiveness is the total proportion of followers per influencer
     # Divide each col of rates over sum(n_(m, l) for m = 1:M)
-    # FIXME: Rename as structural similarity
     struct_similarity = rate_m_l ./ sum(rate_m_l; dims=1)
 
     # Computing distances of each individual to the influencers
@@ -299,19 +297,37 @@ function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
     return R
 end
 
-function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η) where {Bm<:BitMatrix,
+function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt) where {Bm<:BitMatrix,
     T<:AbstractVecOrMat}
     rates = influencer_switch_rates(X, Z, B, C, η)
     RC = similar(C)
-    L = size(Z, 1)
+    L, n = size(Z, 1), size(X, 1)
 
-    choices = [I(L)[:, i] |> BitVector for i = 1:L]
+    # choices = [I(L)[:, i] |> BitVector for i = 1:L]
 
-    for j = axes(X, 1)
-        dc = DiscreteNonParametric(1:L, rates[j, :] ./ sum(rates[j, :]))
-        new_influencer_idx = rand(dc)
-        new_influencer_idx != findfirst(C[j, :]) && @info "agent $(j) switched from influencer $(findfirst(C[j, :])) to $(new_influencer_idx)"
-        RC[j, :] = choices[new_influencer_idx]
+    # for j = axes(X, 1)
+    #     dc = DiscreteNonParametric(1:L, rates[j, :] ./ sum(rates[j, :]))
+    #     new_influencer_idx = rand(dc)
+    #     new_influencer_idx != findfirst(C[j, :]) && @info "agent $(j) switched from influencer $(findfirst(C[j, :])) to $(new_influencer_idx)"
+    #     RC[j, :] = choices[new_influencer_idx]
+    # end
+
+    ## Trying it Luzie's way
+    for j = 1:n
+        r = rand()
+        lambda = sum(rates[j, :])
+        if r < 1 - exp(-lambda * dt)
+            p = rates[j, :] / lambda
+            r2 = rand()
+            k = 1
+            while sum(p[1:k]) < r2
+                k += 1
+            end
+            RC[j, :] = zeros(L)
+            RC[j, k] = 1
+        end
+
+        !any(RC[j, :]) && @error("Influencer switching left agent $(j) alone.")
     end
 
     return RC
@@ -357,9 +373,84 @@ function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
         rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Change influencers
-        view(rC, :, :, i+1) .= switch_influencer(C, X, Z, B, η)
+        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt)
 
     end
 
     return rX, rY, rZ, rC
+end
+
+function plot_evolution(X, Y, Z, C)
+    T = size(X, 3)
+    anim = @animate for t = 1:T
+        plot_frame(X, Y, Z, C, t)
+    end
+
+    return gif(anim, fps = 20)
+end
+
+function plot_frame(X, Y, Z, C, t)
+    colors = [:red, :green, :blue, :black]
+    c_idx = findfirst.(C[:, :, t] |> eachrow)
+
+    p = scatter(
+        eachcol(X[:, :, t])...,
+        c = colors[c_idx],
+        legend = :none
+    )
+    
+    scatter!(
+        p,
+        eachcol(Z[:, :, t])...,
+        m = :+,
+        c = :purple
+    )
+
+    return p
+end
+
+function plot_lambda_radius(X, Y, Z, B, C, t)
+    rates = influencer_switch_rates(
+        X[:, :, t],
+        Z[:, :, t],
+        B,
+        C[:, :, t] |> BitMatrix,
+        15.0
+    )
+
+    # Influencer 1
+    p1 = scatter(eachcol(X[:, :, t])...,
+        zcolor = rates[:, 1],
+        logscale = true,
+        title = "Influencer 1"
+    )
+    scatter!(p1, [Z[1, 1, t]], [Z[1, 2, t]], c = :green, m = :x)
+
+    # Influencer 2
+    p2 = scatter(eachcol(X[:, :, t])...,
+        zcolor = rates[:, 2],
+        logscale = true,
+        title = "Influencer 2"
+    )
+    scatter!(p2, [Z[2, 1, t]], [Z[2, 2, t]], c = :green, m = :x)
+
+    # Influencer 3
+    p3 = scatter(eachcol(X[:, :, t])...,
+        zcolor = rates[:, 3],
+        logscale = true,
+        title = "Influencer 3"
+    )
+    scatter!(p3, [Z[3, 1, t]], [Z[3, 2, t]], c = :green, m = :x)
+
+    # Influencer 4
+    p4 = scatter(eachcol(X[:, :, t])...,
+        zcolor = rates[:, 4],
+        logscale = true,
+        title = "Influencer 4"
+    )
+    scatter!(p4, [Z[4, 1, t]], [Z[4, 2, t]], c = :green, m = :x)
+
+    plot(p1, p2, p3, p4, layout=(2,2), legend=false,
+        plot_title = "Individuals in opinion space colored by structural similarity to influencer"
+    )
 end

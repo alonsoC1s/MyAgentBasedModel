@@ -13,7 +13,9 @@ export
     AgAg_attraction,
     InfAg_attraction,
     MedAg_attraction,
-    solve
+    solve,
+    plot_evolution,
+    plot_frame
 
 include("utils.jl")
 include("abm.jl")
