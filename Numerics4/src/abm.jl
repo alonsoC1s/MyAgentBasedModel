@@ -179,7 +179,7 @@ end
 
 
 """Simulate the ABM """
-function ABMsolve(NT=100; p=ABMconstruct(), q=parameters(), init="4inf", chosenseed=0)
+function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosenseed=0)
     Random.seed!(chosenseed)
     (; dt, domain) = p
     (; n, M, L, sigma, sigmahat, sigmatilde, a, frictionI, frictionM) = q
@@ -239,14 +239,13 @@ function ABMsolve(NT=100; p=ABMconstruct(), q=parameters(), init="4inf", chosens
         end
 
         # apply reflective boundary conditions
-        x = boundaryconditions(x, domain)
-        inf = boundaryconditions(inf, domain)
-        media = boundaryconditions(media, domain)
+        # x = boundaryconditions(x, domain)
+        # inf = boundaryconditions(inf, domain)
+        # media = boundaryconditions(media, domain)
 
         # individual may jump from one influencer to another
         # jumps according to rate model
         FolInfNet = changeinfluencer(state, xold, FolInfNet, infold, (p, q))
-        break
 
         xs = push!(xs, copy(x))
         infs = push!(infs, copy(inf))
