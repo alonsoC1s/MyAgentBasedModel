@@ -1,5 +1,7 @@
 using LinearAlgebra, Distributions, Plots
+using Random
 
+Random.seed!(130923)
 """
     OpinionModelParams
 
@@ -37,9 +39,16 @@ function OpinionModelParams(L, M, n, η, a, b, c, σ, σ̂, σ̃, FI, FM)
 end
 
 function OpinionModelParams()
-    OpinionModelParams(4, 2, 250, 15, 1, 4, 2, 0.5, 0, 0, 10, 100)
+    # OpinionModelParams(4, 2, 250, 15, 1, 4, 2, 0.5, 0, 0, 10, 100)
+    OpinionModelParams(4, 2, 250, 15, 1, 2, 4, 0.5, 0, 0, 10, 100)
 end
 
+"""
+    OpinionModelProblem
+
+encapsulates parameters and other properties of an Agent-Based model of Opinion
+Dynamics.
+"""
 struct OpinionModelProblem{T<:Real}
     p::OpinionModelParams{T} # Model parameters
     X::AbstractVecOrMat{T} # Array of Agents' positions
@@ -125,10 +134,10 @@ function AgAg_attraction(X::AbstractVecOrMat{T}, A::BitMatrix; φ=x -> exp(-x)) 
 end
 
 """
-    AgAg_attraction(X, AgAgNet)
+    AgAg_attraction(omp::OpinionModelProblem, φ = x -> exp(-x))
 
 Calculate the force of attraction on agents exerted by other agents they are
-connected to, as determined by `AgAgNet`, the adjacency matrix.
+connected to, with φ the scaling function.
 """
 # function AgAg_attraction(X, AgAgNet; φ::Function = x -> exp(-x))
 function AgAg_attraction(omp::OpinionModelProblem{T}; φ=x -> exp(-x)) where {T}
@@ -184,7 +193,7 @@ end
 """
     InfAg_attraction(omp::OpinionModelProblem)
 
-Calcultates the Influencer-Agent attraction force for all agents.
+Calculates the Influencer-Agent attraction force for all agents.
 """
 function InfAg_attraction(omp::OpinionModelProblem)
     X, Z, C = omp.X, omp.I, omp.AgInfNet
@@ -198,6 +207,13 @@ end
 #     du = a * AgAg_attraction(u, A) + b * MedAg_attraction(u, M, B) + c * InfAg_attraction(u, Z, C)
 # end
 
+
+"""
+    follower_average(X, Network::BitMatrix)
+
+Calculates the center of mass of the agents connected to the same media or
+influencer as determined by the adjacency matrix `Network`.
+"""
 function follower_average(X::AbstractVecOrMat, Network::BitMatrix)
     mass_centers = zeros(size(Network, 2), size(X, 2))
 
@@ -220,6 +236,12 @@ function follower_average(X::AbstractVecOrMat, Network::BitMatrix)
     return mass_centers
 end
 
+"""
+    agent_drift(X, M, I, A, B, C, p)
+
+Calculates the drift force acting on agents, which is the weighted sum of the
+Agent-Agent, Media-Agent and Influencer-Agent forces of attraction.
+"""
 function agent_drift(X::T, M::T, I::T, A::Bm, B::Bm, C::Bm,
     p::OpinionModelParams) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
     a, b, c = p.a, p.b, p.c
@@ -227,6 +249,11 @@ function agent_drift(X::T, M::T, I::T, A::Bm, B::Bm, C::Bm,
            c * InfAg_attraction(X, I, C)
 end
 
+"""
+    media_drift(X, Y, B; f = identity)
+
+Calculates the drift force acting on media outlets, as described in eq. (4).
+"""
 function media_drift(X::T, Y::T, B::Bm; f=identity) where {T<:AbstractVecOrMat,
     Bm<:BitMatrix}
     force = similar(Y)
@@ -236,6 +263,11 @@ function media_drift(X::T, Y::T, B::Bm; f=identity) where {T<:AbstractVecOrMat,
     return force
 end
 
+"""
+    influencer_drift(X, Z, C, g = identity)
+
+Calculates the drift force action on influencers as described in eq. (5).
+"""
 function influencer_drift(X::T, Z::T, C::Bm; g=identity) where {T<:AbstractVecOrMat,
     Bm<:BitMatrix}
     force = similar(Z)
@@ -270,6 +302,13 @@ function followership_ratings(B::BitMatrix, C::BitMatrix)
 end
 
 
+"""
+    influencer_switch_rates(X, Z, B, C, η; ψ = x -> exp(-x), r = relu)
+
+Returns an n × L matrix where the `j,l`-th entry contains the rate λ of the
+Poisson point process modeling how agent `j` switches influencers to `l`. Note
+that this is not the same as $\Lambda_{m}^{\to l}$.
+"""
 function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
     ψ=x -> exp(-x), r=relu) where {T<:AbstractVecOrMat,Bm<:BitMatrix}
 
@@ -297,45 +336,115 @@ function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
     return R
 end
 
-function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt) where {Bm<:BitMatrix,
-    T<:AbstractVecOrMat}
-    rates = influencer_switch_rates(X, Z, B, C, η)
-    RC = similar(C)
+"""
+    switch_influencer(C, X, Z, B, η, dt; method=:other)
+
+Simulates the Poisson point process that determines how agents change
+influencers based on the calculated switching rates. The keyword argument
+`method` determines how the process is simulated. If `method` == :other, the
+process is simulated with the rates calculated via
+[`influencer_switch_rate`](@ref), and if `method` == :luzie, the process is
+simulated with the legacy approach that was used in the paper preprint.
+
+See also [`influencer_switch_rates`](@ref)
+"""
+function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) where {Bm<:BitMatrix,T<:AbstractVecOrMat}
+
     L, n = size(Z, 1), size(X, 1)
 
-    # choices = [I(L)[:, i] |> BitVector for i = 1:L]
+    if method == :luzie
+        x = X
+        state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
+        FolInfNet = copy(C)
+        inf = Z
 
-    # for j = axes(X, 1)
-    #     dc = DiscreteNonParametric(1:L, rates[j, :] ./ sum(rates[j, :]))
-    #     new_influencer_idx = rand(dc)
-    #     new_influencer_idx != findfirst(C[j, :]) && @info "agent $(j) switched from influencer $(findfirst(C[j, :])) to $(new_influencer_idx)"
-    #     RC[j, :] = choices[new_influencer_idx]
-    # end
+        theta = 0.1 # threshold for r-function
 
-    ## Trying it Luzie's way
-    for j = 1:n
-        r = rand()
-        lambda = sum(rates[j, :])
-        if r < 1 - exp(-lambda * dt)
-            p = rates[j, :] / lambda
-            r2 = rand()
-            k = 1
-            while sum(p[1:k]) < r2
-                k += 1
-            end
-            RC[j, :] = zeros(L)
-            RC[j, k] = 1
+        fraction = zeros(L)
+        for i = 1:L
+            fraction[i] = sum(FolInfNet[:, i] .* state) / sum(FolInfNet[:, i])
         end
 
-        !any(RC[j, :]) && @error("Influencer switching left agent $(j) alone.")
-    end
+        # compute distance of followers to influencers
+        dist = zeros(n, L)
+        for i = 1:L
+            for j = 1:n
+                d = x[j, :] - inf[i, :]
+                dist[j, i] = exp(-sqrt(d[1]^2 + d[2]^2))
+            end
+        end
 
-    return RC
+        # compute attractiveness of influencer for followers
+        attractive = zeros(n, L)
+        for j = 1:n
+            for i = 1:L
+                g2 = state[j] * fraction[i]
+                # The `if` emulates relu(x) = max(0.1, -1 + 2*x)
+                if g2 < theta
+                    g2 = theta
+                end
+                attractive[j, i] = η * dist[j, i] * g2
+            end
+
+            # Select some new influencer index k randomly with probabilities from up.
+            r = rand()
+            lambda = sum(attractive[j, :])
+            # !(isapprox(lambda, 1.0)) && @error "lambda should not be ≠ 1.0!"
+            if r < 1 - exp(-lambda * dt)
+                # Is this to normalize `attractive` so the rows actually sum up to 1??
+                p = attractive[j, :] / lambda
+                r2 = rand()
+                k = 1
+                while sum(p[1:k]) < r2
+                    k = k + 1
+                end
+
+                @info "(L) Agent $(j) switched to influencer $(k)"
+                FolInfNet[j, :] = zeros(L)
+                FolInfNet[j, k] = 1
+            end
+        end
+
+        return FolInfNet
+    else
+        rates = influencer_switch_rates(X, Z, B, C, η)
+        RC = copy(C)
+
+        ## Trying it Luzie's way
+        for j = 1:n
+            r = rand()
+            lambda = sum(rates[j, :])
+            if r < 1 - exp(-lambda * dt)
+                p = rates[j, :] / lambda
+                r2 = rand()
+                k = 1
+                while sum(p[1:k]) < r2
+                    k += 1
+                end
+                @info "Agent $(j) switched to influencer $(k)"
+
+                RC[j, :] = zeros(L)
+                RC[j, k] = 1
+            end
+
+            # !any(RC[j, :]) && @error("Influencer switching left agent $(j) alone.")
+        end
+
+        return RC
+    end
 end
 
-# TODO: test
 
-function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
+"""
+    solve(omp::OpinionModelProblem; Nt=100, dt=0.01, method=:other)
+
+Simulates the evolution of the Opinion Dynamics problem `omp` by solving the
+associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
+
+The kwarg `method` is used to determine the influencer switching method. See
+[`influencer_switch_rates`](@ref) for more information.
+"""
+function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01, method=:other) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -373,7 +482,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01) where {T}
         rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Change influencers
-        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt)
+        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt; method=method)
 
     end
 
@@ -386,7 +495,7 @@ function plot_evolution(X, Y, Z, C)
         plot_frame(X, Y, Z, C, t)
     end
 
-    return gif(anim, fps = 20)
+    return gif(anim, fps=15)
 end
 
 function plot_frame(X, Y, Z, C, t)
@@ -395,15 +504,17 @@ function plot_frame(X, Y, Z, C, t)
 
     p = scatter(
         eachcol(X[:, :, t])...,
-        c = colors[c_idx],
-        legend = :none
+        c=colors[c_idx],
+        legend=:none,
+        xlims = (-2, 2),
+        ylims = (-2, 2)
     )
-    
+
     scatter!(
         p,
         eachcol(Z[:, :, t])...,
-        m = :+,
-        c = :purple
+        m=:+,
+        c=:purple
     )
 
     return p
@@ -418,39 +529,40 @@ function plot_lambda_radius(X, Y, Z, B, C, t)
         15.0
     )
 
-    # Influencer 1
-    p1 = scatter(eachcol(X[:, :, t])...,
-        zcolor = rates[:, 1],
-        logscale = true,
-        title = "Influencer 1"
-    )
-    scatter!(p1, [Z[1, 1, t]], [Z[1, 2, t]], c = :green, m = :x)
+    subplots = [plot() for _ = 1:size(Z, 1)]
 
-    # Influencer 2
-    p2 = scatter(eachcol(X[:, :, t])...,
-        zcolor = rates[:, 2],
-        logscale = true,
-        title = "Influencer 2"
-    )
-    scatter!(p2, [Z[2, 1, t]], [Z[2, 2, t]], c = :green, m = :x)
+    for (i, p) = pairs(subplots)
+        scatter!(p,
+            eachcol(X[:, :, t])...,
+            zcolor=rates[:, i],
+            title="Influencer $(i)"
+        )
+        scatter!(p,
+            [Z[i, 1, t]], [Z[i, 2, t]],
+            c=:green,
+            m=:x
+        )
+    end
 
-    # Influencer 3
-    p3 = scatter(eachcol(X[:, :, t])...,
-        zcolor = rates[:, 3],
-        logscale = true,
-        title = "Influencer 3"
-    )
-    scatter!(p3, [Z[3, 1, t]], [Z[3, 2, t]], c = :green, m = :x)
+    plot(subplots..., layout=(2, 2), legend=false)
 
-    # Influencer 4
-    p4 = scatter(eachcol(X[:, :, t])...,
-        zcolor = rates[:, 4],
-        logscale = true,
-        title = "Influencer 4"
-    )
-    scatter!(p4, [Z[4, 1, t]], [Z[4, 2, t]], c = :green, m = :x)
+end
 
-    plot(p1, p2, p3, p4, layout=(2,2), legend=false,
-        plot_title = "Individuals in opinion space colored by structural similarity to influencer"
+function plot_switch_propensity(X, Y, Z, B, C, t)
+    rates = influencer_switch_rates(
+        X[:, :, t],
+        Z[:, :, t],
+        B,
+        C[:, :, t] |> BitMatrix,
+        15.0
+    )
+
+    propensity = sum(rates; dims=2)
+
+    scatter(eachcol(X[:, :, t])...,
+        zcolor=propensity,
+        title="Agent by switch propensity",
+        legend=:none,
+        colorbar=true
     )
 end
