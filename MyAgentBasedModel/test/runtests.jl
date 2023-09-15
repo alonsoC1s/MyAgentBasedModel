@@ -5,7 +5,9 @@ include("../../Numerics4/src/abm.jl")
 import
     MyAgentBasedModel._orthantize,
     MyAgentBasedModel._place_influencers,
-    MyAgentBasedModel._media_network
+    MyAgentBasedModel._media_network,
+    MyAgentBasedModel.influencer_switch_rates,
+    MyAgentBasedModel.luzie_rates
 
 @testset "Tests for auxiliary functions" begin
     ## 1-d test
@@ -129,5 +131,7 @@ end
    @test influence(X, Y, Z, C, state, (0, (n=n, b=b, c=c, L=L))) == c * MedAg_attraction(X, Y, B) +
         b * InfAg_attraction(X, Z, C)
 
+    # Testing influencer switch rates
+    @test influencer_switch_rates(X, Z, B, C, 15) ≈ luzie_rates(B, X, C, Z, 15)
 end
 end
