@@ -1,8 +1,9 @@
 using StatsBase
 using Random
 using LinearAlgebra
-# using JLD2
+using JLD2
 
+Random.seed!(130923)
 include("setting.jl")
 # include("plotting.jl")
 
@@ -90,9 +91,9 @@ function influence(x, media, inf, FolInfNet, state, (p, q))
             end
         end
     end
-    
+
     # FIXME: Are the parameters switched around? b corresponds to media & c to influencers
-    force = c * force1 + b * force2
+    force = b * force1 + c * force2
     return force
 end
 
@@ -184,7 +185,10 @@ function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosens
     (; dt, domain) = p
     (; n, M, L, sigma, sigmahat, sigmatilde, a, frictionI, frictionM) = q
 
-    x, media, inf, FolInfNet, state, IndNet = ABMinit((p, q))
+    # x, media, inf, FolInfNet, state, IndNet = ABMinit((p, q))
+    initial_state = load("../new_settings.jld2")
+    x, media, inf, FolInfNet, B, IndNet = initial_state["X"], initial_state["Y"], initial_state["Z"], initial_state["C"], initial_state["B"], initial_state["A"]
+    state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
 
     xs = [copy(x)] # list of opinions of individuals in time
     infs = [copy(inf)] # list of opinions of influencers in time
@@ -199,6 +203,7 @@ function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosens
         leaderforce = influence(xold, media, inf, FolInfNet, state, (p, q))
         totalforce = a * individualforce + leaderforce
         x = xold + dt * totalforce + sqrt(dt) * sigma * randn(n, 2)
+        # x = xold + dt * totalforce + sqrt(dt) * sigma * ones(n, 2)
 
         infold = inf
         # influencer opinions adapt slowly to opinions of followers with friction
@@ -207,8 +212,10 @@ function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosens
             if sum(FolInfNet[:, i]) > 0
                 masscenter[i, :] = sum(FolInfNet[:, i] .* xold, dims=1) / sum(FolInfNet[:, i])
                 inf[i, :] = inf[i, :] + dt / frictionI * (masscenter[i, :] - inf[i, :]) + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
+                # inf[i, :] = inf[i, :] + dt / frictionI * (masscenter[i, :] - inf[i, :]) + 1 / frictionI * sqrt(dt) * sigmahat * ones(2, 1)
             else
                 # FIXME: Should `infold` be on the rhs? Or, shouldn't inf[i+1, :] be?
+                @info "Lonely influencer, assuming force = 0"
                 inf[i, :] = inf[i, :] + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
             end
         end
@@ -229,11 +236,15 @@ function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosens
             if size(xM, 1) > 0
                 masscenter[i, :] = sum(xold[xM, :], dims=1) / size(xM, 1)
                 # FIXME: Should "media old" be on the rhs??
-                media[i, :] = media[i, :] + dt / frictionM * 
-                    (masscenter[i, :] - media[i, :]) + 
-                    1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)
+                media[i, :] = media[i, :] + dt / frictionM *
+                                            (masscenter[i, :] - media[i, :]) +
+                              1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)
+                # media[i, :] = media[i, :] + dt / frictionM *
+                #                             (masscenter[i, :] - media[i, :]) +
+                #               1 / frictionM * sqrt(dt) * sigmatilde * ones(2, 1)
             else
                 # FIXME: Should "media old" be on the rhs??
+                @info "Lonely media, assuming force = 0"
                 media[i, :] = media[i, :] + 1 / frictionM * sqrt(dt) * sigmatilde * randn(2, 1)
             end
         end
@@ -267,15 +278,20 @@ end
 sol = ABMsolve()
 xs = sol[1]
 flattened = reshape(mapreduce(permutedims, vcat, xs), (250, 2, :))
+xs = xs[1:end-1]
+interm = reduce(hcat, xs)
+X = reshape(interm, 250, 2, :)
 
-dists = zeros(250, 250, size(flattened, 3))
+jldsave("../stochastic_luzie.jld2"; X)
 
-for (k, t_snapshot) in eachslice(flattened; dims = 3) |> enumerate
-    for (ith_agent, agent) in eachrow(t_snapshot) |> enumerate
-        for (jth_agent, other_agent) in eachrow(t_snapshot) |> enumerate
-            dists[ith_agent, jth_agent, k] = norm(agent - other_agent)
-        end
-    end
-end
+# dists = zeros(250, 250, size(flattened, 3))
 
-dists
+# for (k, t_snapshot) in eachslice(flattened; dims=3) |> enumerate
+#     for (ith_agent, agent) in eachrow(t_snapshot) |> enumerate
+#         for (jth_agent, other_agent) in eachrow(t_snapshot) |> enumerate
+#             dists[ith_agent, jth_agent, k] = norm(agent - other_agent)
+#         end
+#     end
+# end
+
+# dists
