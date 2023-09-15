@@ -112,3 +112,55 @@ end
 function relu(x)
     return max(0.1, -1 + 2 * x)
 end
+
+function luzie_rates(B, x, FolInfNet, inf, eta)
+    n, L = size(x, 1), size(inf, 1)
+
+    state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
+    theta = 0.1 # threshold for r-function
+
+    fraction = zeros(L)
+    for i = 1:L
+        fraction[i] = sum(FolInfNet[:, i] .* state) / sum(FolInfNet[:, i])
+    end
+
+    # compute distance of followers to influencers
+    dist = zeros(n, L)
+    for i = 1:L
+        for j = 1:n
+            d = x[j, :] - inf[i, :]
+            dist[j, i] = exp(-sqrt(d[1]^2 + d[2]^2))
+        end
+    end
+
+    # compute attractiveness of influencer for followers
+    attractive = zeros(n, L)
+    for j = 1:n
+        for i = 1:L
+            g2 = state[j] * fraction[i]
+            # The `if` emulates relu(x) = max(0.1, -1 + 2*x)
+            if g2 < theta
+                g2 = theta
+            end
+            attractive[j, i] = eta * dist[j, i] * g2
+        end
+
+    end
+
+    return attractive
+end
+
+
+function luzie_media_drift(FolInfNet, xold, inf ;dt=0.01)
+    masscenter = zeros(L, 2)
+
+    for i in 1:L
+        if sum(FolInfNet[:, i]) > 0
+            masscenter[i, :] = sum(FolInfNet[:, i] .* xold, dims=1) / sum(FolInfNet[:, i])
+            inf[i, :] = inf[i, :] + dt / frictionI * (masscenter[i, :] - inf[i, :]) + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
+        else
+            # FIXME: Should `infold` be on the rhs? Or, shouldn't inf[i+1, :] be?
+            inf[i, :] = inf[i, :] + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
+        end
+    end
+end

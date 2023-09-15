@@ -39,8 +39,8 @@ function OpinionModelParams(L, M, n, η, a, b, c, σ, σ̂, σ̃, FI, FM)
 end
 
 function OpinionModelParams()
-    # OpinionModelParams(4, 2, 250, 15, 1, 4, 2, 0.5, 0, 0, 10, 100)
-    OpinionModelParams(4, 2, 250, 15, 1, 2, 4, 0.5, 0, 0, 10, 100)
+    OpinionModelParams(4, 2, 250, 15, 1, 4, 2, 0.5, 0, 0, 10, 100)
+    # OpinionModelParams(4, 2, 250, 15, 1, 2, 4, 0.5, 0, 0, 10, 100)
 end
 
 """
@@ -233,6 +233,11 @@ function follower_average(X::AbstractVecOrMat, Network::BitMatrix)
         mass_centers[m, :] = mean(X[ms_followers, :]; dims=1)
     end
 
+    # Set center of mass as missing for lonely actors so drift can deal with it differently
+    if length(lonely_outlets) > 0
+        mass_centers[lonely_outlets] = fill(missing, size(X, 2))
+    end
+
     return mass_centers
 end
 
@@ -256,9 +261,10 @@ Calculates the drift force acting on media outlets, as described in eq. (4).
 """
 function media_drift(X::T, Y::T, B::Bm; f=identity) where {T<:AbstractVecOrMat,
     Bm<:BitMatrix}
+    f_full(x) = ismissing(x) ? 0 : f(x)
     force = similar(Y)
     x_tilde = follower_average(X, B)
-    force = f.(x_tilde .- Y)
+    force = f_full.(x_tilde .- Y)
 
     return force
 end
@@ -270,9 +276,10 @@ Calculates the drift force action on influencers as described in eq. (5).
 """
 function influencer_drift(X::T, Z::T, C::Bm; g=identity) where {T<:AbstractVecOrMat,
     Bm<:BitMatrix}
+    g_full(x) = ismissing(x) ? 0 : g(x)
     force = similar(Z)
     x_hat = follower_average(X, C)
-    force = g.(x_hat .- Z)
+    force = g_full.(x_hat .- Z)
 
     return force
 end
@@ -399,7 +406,7 @@ function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) wher
                     k = k + 1
                 end
 
-                @info "(L) Agent $(j) switched to influencer $(k)"
+                # @info "(L) Agent $(j) switched to influencer $(k)"
                 FolInfNet[j, :] = zeros(L)
                 FolInfNet[j, k] = 1
             end
@@ -421,7 +428,7 @@ function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) wher
                 while sum(p[1:k]) < r2
                     k += 1
                 end
-                @info "Agent $(j) switched to influencer $(k)"
+                # @info "Agent $(j) switched to influencer $(k)"
 
                 RC[j, :] = zeros(L)
                 RC[j, k] = 1
@@ -444,7 +451,7 @@ associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
 The kwarg `method` is used to determine the influencer switching method. See
 [`influencer_switch_rates`](@ref) for more information.
 """
-function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01, method=:other) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -471,7 +478,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=100, dt=0.01, method=:other) wher
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)
-        rX[:, :, i+1] .= X + dt * FA + σ * sqrt(dt) * randn(n, d)
+        rX[:, :, i+1] .= X + dt * FA + σ * sqrt(dt)  * randn(n, d)
 
         # Media movements
         FM = media_drift(X, Y, B)
