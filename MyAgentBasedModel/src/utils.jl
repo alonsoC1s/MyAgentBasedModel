@@ -151,7 +151,7 @@ function luzie_rates(B, x, FolInfNet, inf, eta)
 end
 
 
-function luzie_media_drift(FolInfNet, xold, inf ;dt=0.01)
+function luzie_media_drift(FolInfNet, xold, inf; dt=0.01)
     masscenter = zeros(L, 2)
 
     for i in 1:L
@@ -163,4 +163,97 @@ function luzie_media_drift(FolInfNet, xold, inf ;dt=0.01)
             inf[i, :] = inf[i, :] + 1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
         end
     end
+end
+
+function luzie_changeinfluencer(B, x, FolInfNet, inf, eta, dt=0.01)
+    n, L = size(x, 1), size(inf, 1)
+
+    state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
+    theta = 0.1 # threshold for r-function
+    fraction = zeros(L)
+
+    for i = 1:L
+        fraction[i] = sum(FolInfNet[:, i] .* state) / sum(FolInfNet[:, i])
+    end
+
+    # compute distance of followers to influencers
+    dist = zeros(n, L)
+    for i = 1:L
+        for j = 1:n
+            d = x[j, :] - inf[i, :]
+            dist[j, i] = exp(-sqrt(d[1]^2 + d[2]^2))
+        end
+    end
+
+    # compute attractiveness of influencer for followers
+    attractive = zeros(n, L)
+    for j = 1:n
+        for i = 1:L
+            g2 = state[j] * fraction[i]
+            if g2 < theta
+                g2 = theta
+            end
+            attractive[j, i] = eta * dist[j, i] * g2
+        end
+
+        r = rand()
+        lambda = sum(attractive[j, :])
+        if r < 1 - exp(-lambda * dt)
+            p = attractive[j, :] / lambda
+            r2 = rand()
+            k = 1
+            while sum(p[1:k]) < r2
+                k = k + 1
+            end
+            FolInfNet[j, :] = zeros(L)
+            FolInfNet[j, k] = 1
+        end
+    end
+
+    return FolInfNet
+end
+
+function luzie_influence(x, media, inf, FolInfNet, state, (p, q))
+    (; n, b, c, L) = q
+    force1 = zeros(size(x))
+    force2 = zeros(size(x))
+    for j in 1:n
+        if state[j] == 1
+            force1[j, :] = media[2, :] - x[j, :]
+        else
+            force1[j, :] = media[1, :] - x[j, :]
+        end
+
+        for k in 1:L
+            if FolInfNet[j, k] == 1
+                force2[j, :] = inf[k, :] - x[j, :]
+            end
+        end
+    end
+
+    # FIXME: Are the parameters switched around? b corresponds to media & c to influencers
+    force = b * force1 + c * force2
+    return force
+end
+
+function luzie_attraction(x, IndNet)
+    n = size(IndNet, 1)
+    force = zeros(n, 2)
+    for j in 1:n
+        Neighb = findall(x -> x == 1, IndNet[j, :]) # findall doesn't need a predicate. If the matrix is bool you can just get the indices directly without the predicate x -> x == 1
+        if isempty(Neighb)
+            force[j, :] = [0 0]
+        else
+            fi = [0 0]
+            wsum = 0
+            for i in eachindex(Neighb) # For each neighbor of j-th agent
+                d = x[Neighb[i], :] - x[j, :]
+                w = exp(-sqrt(d[1]^2 + d[2]^2))
+                fi = fi + w * d'
+                wsum = wsum + w
+            end
+            force[j, :] = fi / wsum
+        end
+    end
+    return force
 end

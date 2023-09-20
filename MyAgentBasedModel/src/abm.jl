@@ -478,7 +478,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) wher
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)
-        rX[:, :, i+1] .= X + dt * FA + σ * sqrt(dt)  * randn(n, d)
+        rX[:, :, i+1] .= X + dt * FA + σ * sqrt(dt) * randn(n, d)
 
         # Media movements
         FM = media_drift(X, Y, B)
@@ -509,17 +509,14 @@ function plot_frame(X, Y, Z, C, t)
     colors = [:red, :green, :blue, :black]
     c_idx = findfirst.(C[:, :, t] |> eachrow)
 
-    p = scatter(
-        eachcol(X[:, :, t])...,
+    p = scatter(eachcol(X[:, :, t])...,
         c=colors[c_idx],
         legend=:none,
-        xlims = (-2, 2),
-        ylims = (-2, 2)
+        xlims=(-2, 2),
+        ylims=(-2, 2)
     )
 
-    scatter!(
-        p,
-        eachcol(Z[:, :, t])...,
+    scatter!(p, eachcol(Z[:, :, t])...,
         m=:+,
         c=:purple
     )

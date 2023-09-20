@@ -1,13 +1,19 @@
 module TestUtils
 
-using MyAgentBasedModel, Test
-include("../../Numerics4/src/abm.jl")
+using MyAgentBasedModel, Test, Random
+
+# include("../../Numerics4/src/abm.jl")
+
 import
     MyAgentBasedModel._orthantize,
     MyAgentBasedModel._place_influencers,
     MyAgentBasedModel._media_network,
     MyAgentBasedModel.influencer_switch_rates,
-    MyAgentBasedModel.luzie_rates
+    MyAgentBasedModel.luzie_rates,
+    MyAgentBasedModel.luzie_changeinfluencer,
+    MyAgentBasedModel.luzie_attraction,
+    MyAgentBasedModel.luzie_influence,
+    MyAgentBasedModel.switch_influencer
 
 @testset "Tests for auxiliary functions" begin
     ## 1-d test
@@ -124,14 +130,28 @@ end
    @test_throws ErrorException InfAg_attraction(X, Z, invalid_network)
 
    # Testing agent-agent attraction vs. Luzie's version
-   @test attraction(o.X, o.AgAgNet) == AgAg_attraction(o.X, o.AgAgNet)
+   @test luzie_attraction(o.X, o.AgAgNet) == AgAg_attraction(o.X, o.AgAgNet)
 
    # Convert media adj-matrix to a {-1, 1} vector representation expected by legacy code
    state = (findfirst.(eachrow(B)) .== 2) |> Vector
-   @test influence(X, Y, Z, C, state, (0, (n=n, b=b, c=c, L=L))) == c * MedAg_attraction(X, Y, B) +
+   @test luzie_influence(X, Y, Z, C, state, (0, (n=n, b=b, c=c, L=L))) == c * MedAg_attraction(X, Y, B) +
         b * InfAg_attraction(X, Z, C)
 
     # Testing influencer switch rates
     @test influencer_switch_rates(X, Z, B, C, 15) ≈ luzie_rates(B, X, C, Z, 15)
+
+    # Testing agent swtiching, re-seeding the RNG
+    Random.seed!(200923)
+    U = switch_influencer(C, X, Z, B, 15.0, 0.01, method = :other)
+    Random.seed!(200923)
+    U_l = switch_influencer(C, X, Z, B, 15.0, 0.01, method = :luzie)
+    Random.seed!(200923)
+    V = luzie_changeinfluencer(B, X, C, Z, 15.0, 0.01)
+
+    # Congruency between two versions in the same method
+    @test U == U_l
+    # Testing vs. full Luzie code
+    @test U_l == V
+
 end
 end

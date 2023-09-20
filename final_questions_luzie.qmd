@@ -1,0 +1,115 @@
+---
+title: final questions
+execute: 
+  eval: false
+jupyter: julia-1.9
+---
+
+All of the code excerpts can be found in full-form in the
+[GitHub repo](https://github.com/alonsoC1s/MyAgentBasedModel/tree/main/MyAgentBasedModel).
+
+Recalling the SDE definitions:
+
+The agent's SDE is:
+
+$$
+    dx_i (t) = F_i (\vec{x}, \vec{y}, t) \, dt + \sigma dW_i (t).
+$$
+
+The function $F_i$ is implemented in the code as `agent_drift` (even though the
+nomenclature is wrong and the actual drift function is the one associated with
+noise, it was my mistake). The function is also implemented in such a way that
+instead of computing the force in an agent-by-agent basis, we get an entire
+matrix of $n \times d$.
+
+The media (and influencer's) SDE is:
+
+$$
+    \Gamma dy_m (t) = f(\widetilde{x}_m (t) - y_m (t)) \, dt + \widehat{\sigma} \, d \widehat{W}_m(t).
+$$
+
+The $f$ (and $g$ in the influencer case) functions are implemented in code as `media_drift` and `influencer_drift` due to the same error in naming.
+
+These functions have all been tested against their counterparts in the original
+version of the code and they yield the exact same results up to machine epsilon
+precission. I assume the new implementations are correct, including the case
+where the centers of mass are undefined due to a media/influencer losing all
+followers. Since these are in theory correct, I skip their implementation
+details on this document, but you can find the entire code in the GitHub repo.
+
+As mentioned in the e-mail, the original code and the new version still don't
+reproduce the same behaviour for the exact same initial conditions, seed and
+connectivity configurations. The only thing that I think is substantially
+different is the Euler-Maruyama implementation, which is the following code
+block.
+
+
+```{julia}
+#| fig-cap: Simplified version of the Euler-Maruyama implementation in the new code
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) where {T}
+    # Getting all relevant parameters (not very important to the actual E-M code)
+    X, Y, Z, A, B, C = get_values(omp)
+    σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
+    M, L = omp.p.M, omp.p.L
+    d = size(X, 2)
+    σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
+    η = omp.p.η
+
+    # Allocating solutions & setting initial conditions
+    rX = zeros(T, n, d, Nt)
+    rY = zeros(T, M, d, Nt)
+    rZ = zeros(T, L, d, Nt)
+    rC = zeros(Bool, n, L, Nt)
+
+    rX[:, :, begin] = X
+    rY[:, :, begin] = Y
+    rZ[:, :, begin] = Z
+    rC[:, :, begin] = C
+
+    # Solve with Euler-Maruyama
+    for i = 1:Nt-1
+        X = view(rX, :, :, i)
+        Y = view(rY, :, :, i)
+        Z = view(rZ, :, :, i)
+
+        # Agents movement
+        FA = agent_drift(X, Y, Z, A, B, C, omp.p)
+        rX[:, :, i+1] .= X + dt * FA + σ * sqrt(dt) * randn(n, d)
+
+        # Media movements
+        FM = media_drift(X, Y, B)
+        rY[:, :, i+1] .= Y + (dt / Γ) * FM + (σ̃ / Γ) * sqrt(dt) * randn(M, d)
+
+        # Influencer movements
+        FI = influencer_drift(X, Z, C)
+        rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
+
+        # Change influencers
+        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt; method=method)
+
+    end
+
+    return rX, rY, rZ, rC
+end
+```
+
+Some small comments to help you parse out the important details:
+1. The function signature has a parameter `T`  (for instance `where {T}` at the
+end) that is used to help Julia specialize code better. This is not important to
+the algorithm. Likewise, `zeros(T, a, b, c)` can just be thought of as a matrix
+of zeros of dimension `a * b * c`.
+2. The entire first block that gets the parameter names and symbols can also be
+ignored. I follow the notation of the paper to make things easier to follow.
+3. The function `view(A, :, :, i)` can just be thought of as doing the same as
+`A[:, :, i]`.
+
+As previously mentioned, the variables `FA, FM, FI` are just the "drift" functions which we know are correct. The only difference I could find with respecto 
+
+
+
+# Talking about what other sources say and giving some ideas
+
+- "Introduction to Computational Stochastic PDEs" - Lord, Powell, Shardlow
+- "An Algorithmic intro to Numerical Simulation of stochastic diff eq" - Higham
+
+My comments...
