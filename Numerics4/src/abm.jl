@@ -180,13 +180,13 @@ end
 
 
 """Simulate the ABM """
-function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosenseed=0)
+function ABMsolve(NT=200; p=ABMconstruct(), q=parameters(), init="4inf", chosenseed=130923)
     Random.seed!(chosenseed)
     (; dt, domain) = p
     (; n, M, L, sigma, sigmahat, sigmatilde, a, frictionI, frictionM) = q
 
     # x, media, inf, FolInfNet, state, IndNet = ABMinit((p, q))
-    initial_state = load("../new_settings.jld2")
+    initial_state = load("new_settings.jld2")
     x, media, inf, FolInfNet, B, IndNet = initial_state["X"], initial_state["Y"], initial_state["Z"], initial_state["C"], initial_state["B"], initial_state["A"]
     state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
 
@@ -282,7 +282,7 @@ xs = xs[1:end-1]
 interm = reduce(hcat, xs)
 X = reshape(interm, 250, 2, :)
 
-jldsave("../stochastic_luzie.jld2"; X)
+# jldsave("../stochastic_luzie.jld2"; X)
 
 # dists = zeros(250, 250, size(flattened, 3))
 

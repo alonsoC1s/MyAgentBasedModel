@@ -28,7 +28,8 @@ $$
     \Gamma dy_m (t) = f(\widetilde{x}_m (t) - y_m (t)) \, dt + \widehat{\sigma} \, d \widehat{W}_m(t).
 $$
 
-The $f$ (and $g$ in the influencer case) functions are implemented in code as `media_drift` and `influencer_drift` due to the same error in naming.
+The $f$ (and $g$ in the influencer case) functions are implemented in code as
+`media_drift` and `influencer_drift` due to the same error in naming.
 
 These functions have all been tested against their counterparts in the original
 version of the code and they yield the exact same results up to machine epsilon
@@ -46,7 +47,7 @@ block.
 
 ```{julia}
 #| fig-cap: Simplified version of the Euler-Maruyama implementation in the new code
-function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01) where {T}
     # Getting all relevant parameters (not very important to the actual E-M code)
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
@@ -85,7 +86,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) wher
         rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Change influencers
-        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt; method=method)
+        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt)
 
     end
 
@@ -94,22 +95,88 @@ end
 ```
 
 Some small comments to help you parse out the important details:
+
 1. The function signature has a parameter `T`  (for instance `where {T}` at the
 end) that is used to help Julia specialize code better. This is not important to
 the algorithm. Likewise, `zeros(T, a, b, c)` can just be thought of as a matrix
-of zeros of dimension `a * b * c`.
+of zeros of shape `a * b * c`.
+
 2. The entire first block that gets the parameter names and symbols can also be
 ignored. I follow the notation of the paper to make things easier to follow.
+
 3. The function `view(A, :, :, i)` can just be thought of as doing the same as
 `A[:, :, i]`.
 
-As previously mentioned, the variables `FA, FM, FI` are just the "drift" functions which we know are correct. The only difference I could find with respecto 
+As previously mentioned, the variables `FA, FM, FI` are just the "drift"
+functions which we know are correct. The only difference I could find with
+respect to the reference code is the fact that in the new version the updates
+are done on the whole matrix for each time step, while the previous code does
+the updates on a row-by-row basis. I suspect this is why, even setting the same
+seed, we don't get the same behaviour from the two versions. In other words,
+since the original code is calling the `rand` function more times than the new
+version, the sequence of numbers generated will not match. 
 
+Not being able to reproduce exactly the results from the original code version
+is not necessarily something bad, but I wonder if the way either the original
+code or the new version implement Euler--Maruyama is wrong; given that, if they
+were both correct we would expect the same "limiting" behaviour. With that in
+mind I did some reasearch on books and articles to make sure we weren't
+violating one of E-M's assumptions while implementing. 
 
-
-# Talking about what other sources say and giving some ideas
+I checked:
 
 - "Introduction to Computational Stochastic PDEs" - Lord, Powell, Shardlow
+
 - "An Algorithmic intro to Numerical Simulation of stochastic diff eq" - Higham
 
-My comments...
+And comparing the implementations with the ones presented in the article and the
+book, I can't see any obvious flaws.
+
+As mentioned before, I suspect the source of the differences lies in the
+calculation of the Brownian increment. Both versions of the code sample from a
+Standard Normal distribution and then scale by `sqrt(dt)`. Namely,
+
+```{julia}
+for k in 2:NT+1
+for i in 1:L
+    #=
+        Some code ommited for clarity
+    =#
+    inf[i, :] = inf[i, :] +
+    dt / frictionI * (masscenter[i, :] - inf[i, :]) +
+    1 / frictionI * sqrt(dt) * sigmahat * randn(2, 1)
+end
+# ...
+end
+```
+
+in the original code, and
+
+```{julia}
+for i = 1:Nt-1
+    #=
+        Some code ommited for clarity
+    =#
+    # Influencer movements
+    FI = influencer_drift(X, Z, C)
+    rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
+end
+```
+
+for the new version (where `d` is the dimension of the opinion space). As far as
+I can tell by reading Julia's Random module's documentation, there is no reason
+to think that generating a matrix `randn(2, 1)` `L` times should be different
+from generating a matrix `randn(L, d)` (i.e I would expect the Matrix's rows to
+be independent in both cases). But since you have more experience implementing
+algorithms like this one, I wanted to ask if there is something obvious that I
+missed.
+
+So, in conclusion.
+
+- Is there something obviously wrong with the Euler-Maruyama implementation in
+the new code that might be causing the differences?
+
+- Is either version doing random sampling in a way that violates the algorithm's
+assumptions of independent, identically distributed brownian increments? For
+instance, maybe generating a full matrix does not guarantee independence the
+same way generating row-by-row does.

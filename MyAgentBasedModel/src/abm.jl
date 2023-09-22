@@ -1,7 +1,6 @@
 using LinearAlgebra, Distributions, Plots
 using Random
 
-Random.seed!(130923)
 """
     OpinionModelParams
 
@@ -458,6 +457,9 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) wher
     d = size(X, 2)
     σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
     η = omp.p.η
+    
+    # Seeding the RNG
+    Random.seed!(130923)
 
     # Allocating solutions & setting initial conditions
     rX = zeros(T, n, d, Nt)
