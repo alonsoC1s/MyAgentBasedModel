@@ -231,8 +231,7 @@ function luzie_influence(x, media, inf, FolInfNet, state, (p, q))
         end
     end
 
-    # FIXME: Are the parameters switched around? b corresponds to media & c to influencers
-    force = b * force1 + c * force2
+    force = c * force1 + b * force2
     return force
 end
 
