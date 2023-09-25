@@ -113,7 +113,7 @@ function relu(x)
     return max(0.1, -1 + 2 * x)
 end
 
-function luzie_rates(B, x, FolInfNet, inf, eta)
+function legacy_rates(B, x, FolInfNet, inf, eta)
     n, L = size(x, 1), size(inf, 1)
 
     state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
@@ -151,7 +151,7 @@ function luzie_rates(B, x, FolInfNet, inf, eta)
 end
 
 
-function luzie_media_drift(FolInfNet, xold, inf; dt=0.01)
+function legacy_media_drift(FolInfNet, xold, inf; dt=0.01)
     masscenter = zeros(L, 2)
 
     for i in 1:L
@@ -165,7 +165,7 @@ function luzie_media_drift(FolInfNet, xold, inf; dt=0.01)
     end
 end
 
-function luzie_changeinfluencer(B, x, FolInfNet, inf, eta, dt=0.01)
+function legacy_changeinfluencer(B, x, FolInfNet, inf, eta, dt=0.01)
     n, L = size(x, 1), size(inf, 1)
 
     state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
@@ -213,7 +213,7 @@ function luzie_changeinfluencer(B, x, FolInfNet, inf, eta, dt=0.01)
     return FolInfNet
 end
 
-function luzie_influence(x, media, inf, FolInfNet, state, (p, q))
+function legacy_influence(x, media, inf, FolInfNet, state, (p, q))
     (; n, b, c, L) = q
     force1 = zeros(size(x))
     force2 = zeros(size(x))
@@ -235,7 +235,7 @@ function luzie_influence(x, media, inf, FolInfNet, state, (p, q))
     return force
 end
 
-function luzie_attraction(x, IndNet)
+function legacy_attraction(x, IndNet)
     n = size(IndNet, 1)
     force = zeros(n, 2)
     for j in 1:n
