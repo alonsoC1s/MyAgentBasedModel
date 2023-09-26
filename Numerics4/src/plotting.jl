@@ -205,7 +205,7 @@ end
 
 ### ABM
 
-function ABMplotsingle(centers, inf, media, state, stateinf, (p,q); title = "", clim=(-Inf, Inf),color_agents=false,sigma=0.1,kde =true)
+function ABMplotsingle(centers, inf, media, state, stateinf, (p,q); title = "", clim=(-Inf, Inf),color_agents=false,sigma=0.1,kde =false)
     (;X, Y, domain, dx, dy) = p
     (;L) = q
     n= q.n

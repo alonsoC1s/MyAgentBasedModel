@@ -85,9 +85,8 @@ function influence(x,media,inf,FolInfNet,state,(p,q))
             end
         end
     end
-    @show b
-    @show c
     force = b*force1 + c*force2
+
     return force
 end
 
@@ -155,7 +154,7 @@ end
 
 
 """Simulate the ABM """
-function ABMsolve(NT = 100;  p = ABMconstruct(), q=parameters(), init="4inf",chosenseed=0)
+function ABMsolve(NT = 200;  p = ABMconstruct(), q=parameters(), init="4inf",chosenseed=0)
     Random.seed!(chosenseed)
     (;dt, domain) = p
     (;n, M, L, sigma, sigmahat, sigmatilde, a,  frictionI, frictionM) = q
@@ -219,7 +218,94 @@ function ABMsolve(NT = 100;  p = ABMconstruct(), q=parameters(), init="4inf",cho
         stateinfs = push!(stateinfs, copy(FolInfNet * collect(1:L)))
     end
 
+    ## Sane data representation for the solution
+    fxs = reduce(hcat, xs)
+    X = reshape(fxs, NT, 2, :)
+
     return xs, stateinfs, infs, meds, state, (p,q)
+
+end
+
+## Sane"er" version of solve
+function better_solve(NT = 200;  p = ABMconstruct(), q=parameters(), init="4inf",chosenseed=0)
+    Random.seed!(chosenseed)
+    (;dt, domain) = p
+    (;n, M, L, sigma, sigmahat, sigmatilde, a,  frictionI, frictionM) = q
+
+    # x, media, inf, FolInfNet, state, IndNet = ABMinit((p, q))
+    initial_state = load("../test_data/new_settings.jld2")
+    x, media, inf, FolInfNet, B, IndNet = initial_state["X"], initial_state["Y"], initial_state["Z"], initial_state["C"], initial_state["B"], initial_state["A"]
+    state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
+
+    xs = [copy(x)] # list of opinions of individuals in time
+    infs = [copy(inf)] # list of opinions of influencers in time
+    meds = [copy(media)] # list of opinions of media in time
+    stateinfs = [copy(FolInfNet) * collect(1:L)] # list of which influencer an individual follows in time
+
+    ## Storing the actual adjacency matrix C
+    rC = zeros(Bool, n, L, NT+1)
+    rC[:, :, begin] = FolInfNet
+
+    for k in 2:NT+1
+        xold = x
+        FolInfNet = rC[:, :, k-1]
+
+        # opinions change due to interaction with opinions of friends, influencers and media
+        individualforce = attraction(xold,IndNet)
+        leaderforce = influence(xold,media,inf,FolInfNet,state,(p,q))
+        totalforce = a * individualforce + leaderforce
+        x = xold + dt*totalforce + sqrt(dt)*sigma*randn(n,2); 
+
+        infold = inf
+        # influencer opinions adapt slowly to opinions of followers with friction
+        masscenter=zeros(L,2)
+        for i in 1:L
+            if sum(FolInfNet[:,i])>0 
+                masscenter[i,:] =sum(FolInfNet[:,i] .* xold, dims = 1) /sum(FolInfNet[:,i])    
+                inf[i,:] =  inf[i,:] + dt/frictionI * (masscenter[i,:]-inf[i,:]) + 1/frictionI*sqrt(dt)*sigmahat*randn(2,1) 
+            else
+                inf[i,:] =  inf[i,:] + 1/frictionI*sqrt(dt)*sigmahat*randn(2,1) 
+            end
+        end
+        
+        # media opinions change very slowly based on opinions of followers with friction
+        masscenter=zeros(M,2)
+        states = [-1, 1]
+        for i in 1:M
+            xM = findall(x->x==states[i], state)
+            if size(xM,1)>0
+                masscenter[i,:] = sum(xold[xM,:], dims=1)/size(xM,1)
+                media[i,:] = media[i,:]  + dt/frictionM * (masscenter[i,:] -media[i,:]) + 1/frictionM * sqrt(dt)*sigmatilde*randn(2,1)
+            else
+                media[i,:] = media[i,:]  + 1/frictionM * sqrt(dt)*sigmatilde*randn(2,1)
+            end
+        end
+        
+        # apply reflective boundary conditions
+        # x = boundaryconditions(x,domain)
+        # inf = boundaryconditions(inf,domain)
+        # media = boundaryconditions(media,domain)
+
+        # individual may jump from one influencer to another
+        # jumps according to rate model
+        FolInfNet = changeinfluencer(state,xold,FolInfNet,infold,(p,q))
+        rC[:, :, k] = FolInfNet
+
+        xs = push!(xs,copy(x))
+        infs = push!(infs, copy(inf))
+        meds = push!(meds, copy(media))
+        stateinfs = push!(stateinfs, copy(FolInfNet * collect(1:L)))
+    end
+
+    ## Sane data representation for the solution
+    flattened = reshape(mapreduce(permutedims, vcat, xs), (250, 2, :))
+    xs = xs[1:end-1]
+    interm = reduce(hcat, xs)
+    X = reshape(interm, 250, 2, :)
+
+    @info rC
+
+    return X, rC[:, :, 1:end-1], infs, meds, state, (p,q)
 
 end
 

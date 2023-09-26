@@ -4,7 +4,6 @@ authors = ["Alonso Martínez Cisneros <alonso.mtz99@gmail.com>"]
 version = "0.1.0"
 
 [deps]
-AgentBasedModel = "92fc472d-18b2-4f84-bb62-ff45ef5df20e"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"

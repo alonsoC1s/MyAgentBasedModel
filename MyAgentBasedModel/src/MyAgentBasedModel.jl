@@ -1,7 +1,7 @@
 module MyAgentBasedModel
 
 # Imports...
-using Distributions, LinearAlgebra
+using LinearAlgebra
 
 # Exports...
 export

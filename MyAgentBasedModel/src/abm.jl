@@ -1,5 +1,5 @@
-using LinearAlgebra, Distributions, Plots
-using Random
+using LinearAlgebra, Plots
+using Random, Distributions
 
 """
     OpinionModelParams
@@ -450,7 +450,7 @@ associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
 The kwarg `method` is used to determine the influencer switching method. See
 [`influencer_switch_rates`](@ref) for more information.
 """
-function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other, seed=0) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -459,7 +459,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other) wher
     η = omp.p.η
     
     # Seeding the RNG
-    Random.seed!(130923)
+    Random.seed!(seed)
 
     # Allocating solutions & setting initial conditions
     rX = zeros(T, n, d, Nt)
