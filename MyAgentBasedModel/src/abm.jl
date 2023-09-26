@@ -477,6 +477,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other, seed
         X = view(rX, :, :, i)
         Y = view(rY, :, :, i)
         Z = view(rZ, :, :, i)
+        C = view(rC, :, :, i)
 
         # Agents movement
         FA = agent_drift(X, Y, Z, A, B, C, omp.p)
