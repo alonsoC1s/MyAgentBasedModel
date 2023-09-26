@@ -1,5 +1,5 @@
 using Plots
-# using LaTeXStrings
+using LaTeXStrings
 # pyplot()
 
 
@@ -50,10 +50,10 @@ function PDEplotsingle(u,z,y,(p,q),t; save=true, name="4inf", clim=(0,Inf), ylab
 
 
 
-    # if save==true
-    #     savefig(string("img/pde_single_",name,".png"))
-    #     savefig(string("img/pde_single_",name,".pdf"))
-    # end
+    if save==true
+        savefig(string("img/pde_single_",name,".png"))
+        savefig(string("img/pde_single_",name,".pdf"))
+    end
     return subp
 end
 
@@ -116,10 +116,10 @@ function PDEplotsnapshots(sols::Vector, Ps::Vector, ts; save = true, name="4inf"
         plot!(gridp[k],xformatter=_->"")
     end
 
-    # if save==true
-    #     savefig(string("img/pde_snapshots_",name,".png"))
-    #     savefig(string("img/pde_snapshots_",name,".pdf"))
-    # end
+    if save==true
+        savefig(string("img/pde_snapshots_",name,".png"))
+        savefig(string("img/pde_snapshots_",name,".pdf"))
+    end
 end
 
 PDEplotsnapshots1row(sol, (p,q), args...; kwargs...) = PDEplotsnapshots1row([sol], [(p,q)], args...; kwargs...)
@@ -177,10 +177,10 @@ function PDEplotsnapshots1row(sols::Vector, Ps::Vector, ts; save = true, name="4
         end
     end
 
-    # if save==true
-    #     savefig(string("img/pde_snapshots_",name,".png"))
-    #     savefig(string("img/pde_snapshots_",name,".pdf"))
-    # end
+    if save==true
+        savefig(string("img/pde_snapshots_",name,".png"))
+        savefig(string("img/pde_snapshots_",name,".pdf"))
+    end
 end
 
 PDEgifsingle(sol, (p,q), args...; kwargs...) = PDEgifsingle([sol], [(p,q)], args...; kwargs...)
@@ -196,9 +196,9 @@ function PDEgifsingle(sols::Vector, Ps::Vector, dt=0.1; save=true, name = "4inf"
         end
         T += sol.t[end]
     end
-    # if save==true
-    #     Plots.gif(anim, string("img/pde_single_",name,".gif"), fps = 10)
-    # end
+    if save==true
+        Plots.gif(anim, string("img/pde_single_",name,".gif"), fps = 10)
+    end
 end
 
  
@@ -219,7 +219,7 @@ function ABMplotsingle(centers, inf, media, state, stateinf, (p,q); title = "", 
         subp=plot(leg=false, title = title)
     end
     if color_agents==false
-        scatter!(subp, centers[:,1], centers[:,2], markercolor=color_oinf,markersize=size_individuals, markerstrokewidth=0.5)
+        scatter!(subp, centers[:,1], centers[:,2], markercolor=color_noinf,markersize=size_individuals, markerstrokewidth=0.5)
     else
         states = [-1 1]
         for j in 1:L
@@ -275,10 +275,10 @@ function ABMplotsnapshots(xs, stateinfs, infs, meds, state, (p,q), ts; save = tr
         plot!(gridp[k],xformatter=_->"")
     end
 
-    # if save==true
-    #     savefig(string("img/abm_snapshots_",name,".png"))
-    #     savefig(string("img/abm_snapshots_",name,".pdf"))
-    # end
+    if save==true
+        savefig(string("img/abm_snapshots_",name,".png"))
+        savefig(string("img/abm_snapshots_",name,".pdf"))
+    end
 end
 
 
@@ -313,10 +313,10 @@ function ABMplotfollowernumbers(stateinfs,state,(p,q);save=true,name="4inf")
             scatter!(subp, [0.05], [sum(props[5,1:2*(j-1) + i])-0.5*props[5,2*(j-1) + i]], markercolor=colors_followers[j],markershape=markers_readers[i],markersize=1.5*size_individuals,legend=false)
         end
     end
-    # if save==true
-    #     savefig(string("img/abm_follower_",name,".png"))
-    #     savefig(string("img/abm_follower_",name,".pdf"))
-    # end
+    if save==true
+        savefig(string("img/abm_follower_",name,".png"))
+        savefig(string("img/abm_follower_",name,".pdf"))
+    end
 end
 
 
@@ -328,9 +328,9 @@ function ABMgifsingle(xs, stateinfs, state, infs, meds, (p,q); save=true, dN=5, 
         subp = ABMplotsingle(xs[t], infs[t]', meds[t]',state,stateinfs[t], (p,q), title = string("t = ", string(round((t-1)*dt, digits=2))),color_agents=true)
         plot(subp)
     end
-    # if save==true
-    #     Plots.gif(abmgif, string("img/abm_single_",name,".gif"), fps = 10)
-    # end
+    if save==true
+        Plots.gif(abmgif, string("img/abm_single_",name,".gif"), fps = 10)
+    end
 end
 
 ### ENSEMBLE
@@ -399,8 +399,9 @@ function plotensemblesnapshots(us, zs, ys, (p,q), us2, zs2, ys2, (p2,q2), tmax; 
         plot!(gridp[k],xformatter=_->"")
     end
 
-    # if save==true
-    #     savefig(string("img/ensemblesnapshots_",name,".png"))
-    #     savefig(string("img/ensemblesnapshots_",name,".pdf"))
-    # end
+    if save==true
+        savefig(string("img/ensemblesnapshots_",name,".png"))
+        savefig(string("img/ensemblesnapshots_",name,".pdf"))
+    end
 end
+

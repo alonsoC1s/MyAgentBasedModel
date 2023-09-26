@@ -38,8 +38,8 @@ function OpinionModelParams(L, M, n, η, a, b, c, σ, σ̂, σ̃, FI, FM)
 end
 
 function OpinionModelParams()
-    OpinionModelParams(4, 2, 250, 15, 1, 4, 2, 0.5, 0, 0, 10, 100)
-    # OpinionModelParams(4, 2, 250, 15, 1, 2, 4, 0.5, 0, 0, 10, 100)
+    # OpinionModelParams(4, 2, 250, 15, 1, 4, 2, 0.5, 0, 0, 10, 100)
+    OpinionModelParams(4, 2, 250, 15, 1, 2, 4, 0.5, 0, 0, 10, 100)
 end
 
 """

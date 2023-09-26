@@ -1,5 +1,3 @@
-Hello world
-
 # SocialMediaModel
 
 This repository contains the Julia code accompanying the paper 
