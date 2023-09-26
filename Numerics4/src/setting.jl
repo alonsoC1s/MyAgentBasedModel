@@ -4,8 +4,8 @@ function parameters(;
         n = 250, # number of agents 
         eta = 15.0, # rate constant for changing influencer  
         a = 1., # interaction strength between agents
-        b = 4., # interaction strength between agents and influencers
-        c = 2., # interaction strength between agents and media 
+        b = 2., # interaction strength between agents and influencers
+        c = 4., # interaction strength between agents and media 
         sigma = 0.5, # noise on individual agents
         sigmahat = 0., # noise on influencers, warning: in some places in the code it is assumed that sigmahat=0
         sigmatilde = 0., # noise on media, warning: in some places in the code it is assumed that sigmatilde=0
