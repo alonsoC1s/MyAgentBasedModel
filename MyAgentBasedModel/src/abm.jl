@@ -358,61 +358,6 @@ function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) wher
 
     L, n = size(Z, 1), size(X, 1)
 
-    if method == :luzie
-        x = X
-        state = replace(findfirst.(eachrow(B)) .== 2, 0 => -1)
-        FolInfNet = copy(C)
-        inf = Z
-
-        theta = 0.1 # threshold for r-function
-
-        fraction = zeros(L)
-        for i = 1:L
-            fraction[i] = sum(FolInfNet[:, i] .* state) / sum(FolInfNet[:, i])
-        end
-
-        # compute distance of followers to influencers
-        dist = zeros(n, L)
-        for i = 1:L
-            for j = 1:n
-                d = x[j, :] - inf[i, :]
-                dist[j, i] = exp(-sqrt(d[1]^2 + d[2]^2))
-            end
-        end
-
-        # compute attractiveness of influencer for followers
-        attractive = zeros(n, L)
-        for j = 1:n
-            for i = 1:L
-                g2 = state[j] * fraction[i]
-                # The `if` emulates relu(x) = max(0.1, -1 + 2*x)
-                if g2 < theta
-                    g2 = theta
-                end
-                attractive[j, i] = η * dist[j, i] * g2
-            end
-
-            # Select some new influencer index k randomly with probabilities from up.
-            r = rand()
-            lambda = sum(attractive[j, :])
-            # !(isapprox(lambda, 1.0)) && @error "lambda should not be ≠ 1.0!"
-            if r < 1 - exp(-lambda * dt)
-                # Is this to normalize `attractive` so the rows actually sum up to 1??
-                p = attractive[j, :] / lambda
-                r2 = rand()
-                k = 1
-                while sum(p[1:k]) < r2
-                    k = k + 1
-                end
-
-                # @info "(L) Agent $(j) switched to influencer $(k)"
-                FolInfNet[j, :] = zeros(L)
-                FolInfNet[j, k] = 1
-            end
-        end
-
-        return FolInfNet
-    else
         rates = influencer_switch_rates(X, Z, B, C, η)
         RC = copy(C)
 
@@ -437,7 +382,6 @@ function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) wher
         end
 
         return RC
-    end
 end
 
 
@@ -450,7 +394,7 @@ associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
 The kwarg `method` is used to determine the influencer switching method. See
 [`influencer_switch_rates`](@ref) for more information.
 """
-function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other, seed=0) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01,seed=0) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -492,7 +436,7 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, method=:other, seed
         rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Change influencers
-        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt; method=method)
+        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt)
 
     end
 
