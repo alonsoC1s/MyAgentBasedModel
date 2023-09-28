@@ -1,0 +1,73 @@
+---
+title: final questions
+jupyter: julia-1.9
+---
+
+The operations done on the adjacency matrices are of the form:
+
+
+```{julia}
+#| eval: false
+julia> neighboors = findall(A[j, :])
+julia> media_idx = findfirst(B[i, :])
+julia> ms_followers = Network[:, m] |> findall
+julia> audience_m = findall(B[:, m])
+```
+
+Some are row-wise, some are col-wise. What can be done with the shape of the
+matrices when using sparse matrix?
+
+```{julia}
+using Pkg
+Pkg.activate("../.")
+```
+
+```{julia}
+using DataFrames, BenchmarkTools
+
+function rowwise_find(A)
+    for r = eachrow(A)
+        findall(r)
+    end
+end
+
+function colwise_find(A)
+    for c = eachcol(A)
+        findall(c)
+    end
+end
+
+n = 1000
+m = 4
+p = 0.4
+
+# Times in ns
+col_tall = @benchmark colwise_find(A) setup=(A = sprand(Bool, n, m, p))
+row_tall = @benchmark rowwise_find(A) setup=(A = sprand(Bool, n, m, p))
+col_wide = @benchmark colwise_find(A) setup=(A = sprand(Bool, m, n, p))
+row_wide = @benchmark rowwise_find(A) setup=(A = sprand(Bool, m, n, p))
+```
+
+```{julia}
+# Dumping into a dataframe
+alltimes = DataFrame(time=Float64[], method=String[])
+for (trial, tname) in zip([col_tall, row_tall, col_wide, row_wide], ["tall by_col", "tall by_row", "wide by_col", "wide by_row"])
+    append!(alltimes,
+        DataFrame(time = trial.times / 1e3, method = fill(tname, length(trial.times)))
+    )
+end
+```
+
+The graph
+
+
+```{julia}
+using Gadfly
+
+Gadfly.plot(alltimes, x = :time,
+    color = :method,
+    Geom.histogram,
+    Guide.colorkey(title = "Method"),
+    Scale.x_log10
+)
+```

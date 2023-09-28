@@ -233,6 +233,7 @@ function follower_average(X::AbstractVecOrMat, Network::BitMatrix)
     end
 
     # Set center of mass as missing for lonely actors so drift can deal with it differently
+    # FIXME: Eliminar y solamente crear array de missings en vez de esto
     if length(lonely_outlets) > 0
         mass_centers[lonely_outlets] = fill(missing, size(X, 2))
     end
@@ -303,7 +304,9 @@ function followership_ratings(B::BitMatrix, C::BitMatrix)
         audience_m = findall(B[:, m])
         R[m, :] = count(C[audience_m, :]; dims=1) ./ n
     end
-
+    if length(lonely_outlets) > 0
+        mass_centers[lonely_outlets] = fill(missing, size(X, 2))
+    end
     return R
 end
 
@@ -358,30 +361,30 @@ function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) wher
 
     L, n = size(Z, 1), size(X, 1)
 
-        rates = influencer_switch_rates(X, Z, B, C, η)
-        RC = copy(C)
+    rates = influencer_switch_rates(X, Z, B, C, η)
+    RC = copy(C)
 
-        ## Trying it Luzie's way
-        for j = 1:n
-            r = rand()
-            lambda = sum(rates[j, :])
-            if r < 1 - exp(-lambda * dt)
-                p = rates[j, :] / lambda
-                r2 = rand()
-                k = 1
-                while sum(p[1:k]) < r2
-                    k += 1
-                end
-                # @info "Agent $(j) switched to influencer $(k)"
-
-                RC[j, :] = zeros(L)
-                RC[j, k] = 1
+    ## Trying it Luzie's way
+    for j = 1:n
+        r = rand()
+        lambda = sum(rates[j, :])
+        if r < 1 - exp(-lambda * dt)
+            p = rates[j, :] / lambda
+            r2 = rand()
+            k = 1
+            while sum(p[1:k]) < r2
+                k += 1
             end
+            # @info "Agent $(j) switched to influencer $(k)"
 
-            # !any(RC[j, :]) && @error("Influencer switching left agent $(j) alone.")
+            RC[j, :] = zeros(L)
+            RC[j, k] = 1
         end
 
-        return RC
+        # !any(RC[j, :]) && @error("Influencer switching left agent $(j) alone.")
+    end
+
+    return RC
 end
 
 
@@ -394,14 +397,14 @@ associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
 The kwarg `method` is used to determine the influencer switching method. See
 [`influencer_switch_rates`](@ref) for more information.
 """
-function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01,seed=0) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=0) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
     d = size(X, 2)
     σ̂, σ̃ = omp.p.σ̂, omp.p.σ̃
     η = omp.p.η
-    
+
     # Seeding the RNG
     Random.seed!(seed)
 
