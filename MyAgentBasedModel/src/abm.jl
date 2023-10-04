@@ -304,9 +304,7 @@ function followership_ratings(B::BitMatrix, C::BitMatrix)
         audience_m = findall(B[:, m])
         R[m, :] = count(C[audience_m, :]; dims=1) ./ n
     end
-    if length(lonely_outlets) > 0
-        mass_centers[lonely_outlets] = fill(missing, size(X, 2))
-    end
+
     return R
 end
 

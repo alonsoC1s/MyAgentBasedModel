@@ -113,6 +113,9 @@ function relu(x)
     return max(0.1, -1 + 2 * x)
 end
 
+function adj_to_rate_matrix()
+end
+
 function legacy_rates(B, x, FolInfNet, inf, eta)
     n, L = size(x, 1), size(inf, 1)
 
