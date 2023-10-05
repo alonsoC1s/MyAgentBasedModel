@@ -344,7 +344,7 @@ function influencer_switch_rates(X::T, Z::T, B::Bm, C::Bm, η;
 end
 
 """
-    switch_influencer(C, X, Z, B, η, dt; method=:other)
+    switch_influencer(C, X, Z, B, η, dt)
 
 Simulates the Poisson point process that determines how agents change
 influencers based on the calculated switching rates. The keyword argument
@@ -355,7 +355,7 @@ simulated with the legacy approach that was used in the paper preprint.
 
 See also [`influencer_switch_rates`](@ref)
 """
-function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt; method=:other) where {Bm<:BitMatrix,T<:AbstractVecOrMat}
+function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt) where {Bm<:BitMatrix,T<:AbstractVecOrMat}
 
     L, n = size(Z, 1), size(X, 1)
 
