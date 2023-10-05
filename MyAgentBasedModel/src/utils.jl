@@ -113,7 +113,23 @@ function relu(x)
     return max(0.1, -1 + 2 * x)
 end
 
-function adj_to_rate_matrix()
+function fragment_network(C::BitArray)
+    nw = findall(C)
+
+    ranges = Vector{UnitRange}(undef, size(C, 2))
+    for (l_range, cindex) = enumerate(nw)
+    end
+
+end
+
+function time_rate_tensor(R::AbstractArray{U, 3}, C::BitArray{3}) where {U<:Real}
+    n, L, T = size(R)
+
+    # Λ = Array{T, 3}(undef, n, n, T)
+    Λ = similar(R, n, n, T)
+
+    for (R_t, C_t) = zip(eachslice(R; dims=3), eachslice(C; dims=3))
+    end
 end
 
 function legacy_rates(B, x, FolInfNet, inf, eta)
