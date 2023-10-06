@@ -113,23 +113,59 @@ function relu(x)
     return max(0.1, -1 + 2 * x)
 end
 
+# FIXME: This is faster for full Arrays, but BitArrays do findfirst smarter so
+# this is potentially slower. The advantage on sparse arrays is not clear
 function fragment_network(C::BitArray)
-    nw = findall(C)
+    # Thanks to the problem properties we know there are exactly n non-zeros in C
+    n, L = size(C)
 
-    ranges = Vector{UnitRange}(undef, size(C, 2))
-    for (l_range, cindex) = enumerate(nw)
+    # Sorted indices of agents such that member of the l-th clique are in positions c_(l-1):c_l
+    agent_ids = Vector{Int}(undef, n)
+    # Range limits c_l for agents in the cliques
+    clique_limits = Vector{Int}(undef, L+1)
+    clique_limits[begin] = 0
+    clique_limits[end] = n
+
+    a, l = 1, 1 # Current index of agent_ids & clique_limits
+
+    # Since we iterate by columns, cliques end when we move to the next col.
+    for (cartInd, val) = pairs(IndexCartesian(), C)
+        if val
+            i, j = Tuple(cartInd)
+            @inbounds agent_ids[a] = i
+            # Is this true entry on the same column as last?
+            # If not, a clique ends in the (a-1)th entry of agent_ids
+            l != j && (l += 1; @inbounds clique_limits[l] = a-1)
+            a += 1
+        end
     end
 
+    return agent_ids, ntuple(i -> clique_limits[i]+1:clique_limits[i+1], L)
 end
 
-function time_rate_tensor(R::AbstractArray{U, 3}, C::BitArray{3}) where {U<:Real}
+function time_rate_tensor(R::AbstractArray{U, 3},
+    C::BitArray{3}) where {U<:Real}
     n, L, T = size(R)
 
+    @assert size(R, 3) == size(C, 3)
     # Λ = Array{T, 3}(undef, n, n, T)
-    Λ = similar(R, n, n, T)
+    Λ = similar(R, L, L, T)
 
-    for (R_t, C_t) = zip(eachslice(R; dims=3), eachslice(C; dims=3))
+    # for (R_t, C_t) = zip(eachslice(R; dims=3), eachslice(C; dims=3))
+    for t = 1:T
+        C_t, R_t = view(C, :, :, t), view(R, :, :, t)
+        # Set "staying" rates to zero
+        leaving_rates = .!C_t .* R_t
+        # use fragmented network to sum leaving rate for whole clique at once
+        clique_ids, clique_bounds = fragment_network(C_t |> BitMatrix)
+        for (l, range) = pairs(clique_bounds)
+            clique_rates = leaving_rates[clique_ids[range], :]
+            λ = sum(clique_rates; dims=1) |> vec
+            @inbounds Λ[:, l, t] = λ
+            @inbounds Λ[l, l, t] = -sum(λ)
+        end
     end
+    return Λ
 end
 
 function legacy_rates(B, x, FolInfNet, inf, eta)

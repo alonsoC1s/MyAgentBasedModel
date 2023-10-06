@@ -15,7 +15,8 @@ export
     MedAg_attraction,
     solve,
     plot_evolution,
-    plot_frame
+    plot_frame,
+    time_rate_tensor
 
 include("utils.jl")
 include("abm.jl")

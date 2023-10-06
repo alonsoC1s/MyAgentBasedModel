@@ -355,11 +355,11 @@ simulated with the legacy approach that was used in the paper preprint.
 
 See also [`influencer_switch_rates`](@ref)
 """
-function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt) where {Bm<:BitMatrix,T<:AbstractVecOrMat}
+function switch_influencer(C::Bm, X::T, Z::T, rates::T, dt) where {Bm<:BitMatrix,T<:AbstractVecOrMat}
 
     L, n = size(Z, 1), size(X, 1)
 
-    rates = influencer_switch_rates(X, Z, B, C, η)
+    # rates = influencer_switch_rates(X, Z, B, C, η)
     RC = copy(C)
 
     ## Trying it Luzie's way
@@ -373,13 +373,10 @@ function switch_influencer(C::Bm, X::T, Z::T, B::Bm, η, dt) where {Bm<:BitMatri
             while sum(p[1:k]) < r2
                 k += 1
             end
-            # @info "Agent $(j) switched to influencer $(k)"
 
             RC[j, :] = zeros(L)
             RC[j, k] = 1
         end
-
-        # !any(RC[j, :]) && @error("Influencer switching left agent $(j) alone.")
     end
 
     return RC
@@ -395,7 +392,7 @@ associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
 The kwarg `method` is used to determine the influencer switching method. See
 [`influencer_switch_rates`](@ref) for more information.
 """
-function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=0) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=MersenneTwister()) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -410,7 +407,9 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=0) where {T}
     rX = zeros(T, n, d, Nt)
     rY = zeros(T, M, d, Nt)
     rZ = zeros(T, L, d, Nt)
-    rC = zeros(Bool, n, L, Nt)
+    rC = BitArray{3}(undef, n, L, Nt)
+    # Jump rates can be left uninitialzied
+    rR = Array{T, 3}(undef, n, L, Nt)
 
     rX[:, :, begin] = X
     rY[:, :, begin] = Y
@@ -437,11 +436,14 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=0) where {T}
         rZ[:, :, i+1] .= Z + (dt / γ) * FI + (σ̂ / γ) * sqrt(dt) * randn(L, d)
 
         # Change influencers
-        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, B, η, dt)
+        rates = influencer_switch_rates(X, Z, B, C, η)
+        rR[:, :, i] .= rates
+        R = view(rR, :, :, i)
+        view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, R, dt)
 
     end
 
-    return rX, rY, rZ, rC
+    return rX, rY, rZ, rC, rR
 end
 
 function plot_evolution(X, Y, Z, C)
