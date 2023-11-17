@@ -72,7 +72,10 @@ end
 function OpinionModelProblem(dom::Vararg{Tuple{T,T},N};
     p=OpinionModelParams()) where {N,T<:Real}
     # Place agents uniformly distributed across the domain
-    X = reduce(hcat, [rand(Uniform(t...), p.n) for t in dom]) # p.n × N matrix
+    pX = reduce(hcat, [rand(Uniform(t...), p.n) for t in dom]) # p.n × N matrix
+    perm = sortperm(sort(sum(pX; dims=2) |> vec))
+    @info perm
+    X = pX[perm, :]
 
     # We consider just 2 media outlets at the "corners"
     M = vcat(
@@ -91,10 +94,20 @@ function OpinionModelProblem(dom::Vararg{Tuple{T,T},N};
     I = _place_influencers(X, AgInfNet)
 
     # Every agent interacts with every other agent (including themselves)
-    AgAgNet = trues(p.n, p.n) |> BitMatrix
+    # AgAgNet = trues(p.n, p.n) |> BitMatrix
+    # AgAgNet = bitrand(p.n, p.n) # Nothing interesting happened
+    AgAgNet = falses(p.n, p.n)
+    orthant_subnet = falses(p.n, p.n)
+    # And-ing into AgAgNet to connect individuals that are on the same orthant.
+    for orthant = eachcol(AgInfNet)
+        orthant_members = findall(orthant)
+        foreach(pair -> orthant_subnet[pair...] = true, Iterators.product(orthant_members, orthant_members))
+        AgAgNet = AgAgNet .|| orthant_subnet
+        # Reseting the current orthant's subnetwork for the next iteration
+        fill!(orthant_subnet, false)
+    end
 
-    # Assign agents to media outlet randomly
-    # FIXME: Agents should be connected to at least 1 media outlet
+    # Assign agents to media outlet randomly s.t. every agent is connected to 1 and only 1 media.
     AgMedNet = _media_network(p.n, p.M)
 
     if N == 1
@@ -199,14 +212,6 @@ function InfAg_attraction(omp::OpinionModelProblem)
     return InfAg_attraction(X, Z, C)
 end
 
-# function agent_force!(du, u, p, t)
-#     a, b, c = p.p.a, p.p.b, p.p.c
-#     A, B, C = p.AgAgNet, p.AgInfNet, p.AgMedNet
-#     M, Z = p.M, p.I
-#     du = a * AgAg_attraction(u, A) + b * MedAg_attraction(u, M, B) + c * InfAg_attraction(u, Z, C)
-# end
-
-
 """
     follower_average(X, Network::BitMatrix)
 
@@ -271,7 +276,7 @@ end
 
 """
     influencer_drift(X, Z, C, g = identity)
-
+    ;;; 1
 Calculates the drift force action on influencers as described in eq. (5).
 """
 function influencer_drift(X::T, Z::T, C::Bm; g=identity) where {T<:AbstractVecOrMat,
