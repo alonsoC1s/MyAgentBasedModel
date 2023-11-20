@@ -1,0 +1,87 @@
+---
+title: Playing with the Agent-Agent network for the ABM
+format: revealjs
+institute: Zuse Institute Berlin
+fig-align: center
+---
+
+:::{.hidden}
+```{julia}
+using Pkg
+Pkg.activate("../.")
+
+using MyAgentBasedModel
+using JLD2
+using Plots
+
+theme(:ggplot2)
+```
+:::
+
+Initially, the model considers a complete Agent-Agent interaction network.
+
+We start with two identical models initialized with the exact same seed so that
+
+- Agents are in the same positions
+- Media are in the same positions
+- Influencers are in the same positions
+
+. . .
+
+All other parameters being exactly equal.
+
+
+# Everyone interacts with everyone
+
+```{julia}
+omp = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123)
+X, Y, Z, C, R = solve(omp)
+
+plot_evolution(X, Y, Z, C)
+```
+
+# Everyone interacts only within their clicque
+
+```{julia}
+omp = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123, AgAgNetF=_ag_ag_echo_chamber)
+Xe, Ye, Ze, Ce, Re = solve(omp)
+
+plot_evolution(Xe, Ye, Ze, Ce)
+```
+
+-----
+
+It's hard to tell a difference, they both look almost the same. The one with the
+echo chamber effect exhibits a "lateral spreading".
+
+. . .
+
+The idea was to use Wasserstein distances to measure how different the
+distributions are.
+
+----
+
+
+:::{.panel-tabset}
+
+# Last frame of normal simulation
+```{julia}
+plot_frame(X, Y, Z, C, 200) |> display
+```
+
+# Last frame of echo chamber simulation
+```{julia}
+plot_frame(Xe, Ye, Ze, Ce, 200) |> display
+```
+
+:::
+
+# Conclusion (?)
+
+- The main effect is still the attraction excerted by media outlets
+
+- The spreading may have to do with how the agents feel attraction to their
+influencer.
+
+- The spreading differences persist even if I move the media agencies closer to
+the center.

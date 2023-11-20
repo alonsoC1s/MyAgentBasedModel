@@ -16,7 +16,8 @@ export
     solve,
     plot_evolution,
     plot_frame,
-    time_rate_tensor
+    time_rate_tensor,
+    _ag_ag_echo_chamber
 
 include("utils.jl")
 include("abm.jl")

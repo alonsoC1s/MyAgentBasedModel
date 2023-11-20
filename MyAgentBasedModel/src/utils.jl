@@ -72,6 +72,35 @@ function _orthantize(X)
 end
 
 """
+    _ag_ag_echo_chamber(AgInfNet::BitArray)
+
+Constructs a fully echo-chamber Agent-Agent adjacency network. In other words,
+constructs a network of Agents where each Agent is only connected to, and thus
+only influence by, Agents that follow the same influencer.
+"""
+function _ag_ag_echo_chamber(AgInfNet::BitArray)
+    n = size(AgInfNet, 1)
+    AgAgNet = falses(n, n)
+    clicque_subnet = falses(n, n)
+    
+    # For each influencer we find the followers and mutually connect all of them.
+    for clicque = eachcol(AgInfNet)
+        clicque_peers = findall(clicque) # Indices of agents following the current influencer.
+
+        # We compute all possible pairs of agents withing the clicque (Cartesian product).
+        all_pairs = Iterators.product(clicque_peers, clicque_peers) 
+        foreach(pair -> clicque_subnet[pair...] = true, all_pairs)
+
+        # And-ing into AgAgNet to connect individuals that are on the same orthant.
+        AgAgNet = AgAgNet .|| clicque_subnet
+        # Reseting the current influencer's subnetwork for the next iteration
+        fill!(clicque_subnet, false)
+    end
+
+    return AgAgNet
+end
+
+"""
     _place_influencers(X::AbstractArray{Float64, N}, AgInfNet::BitMatrix)
 
 Returns the positions of the influencers in the problem space calculated as the

@@ -70,17 +70,21 @@ function Base.show(io::IO, omp::OpinionModelProblem{T}) where {T}
 end
 
 function OpinionModelProblem(dom::Vararg{Tuple{T,T},N};
-    p=OpinionModelParams()) where {N,T<:Real}
+    p=OpinionModelParams(), seed=MersenneTwister(),
+    AgAgNetF::Function = I -> trues(p.n, p.n)) where {N,T<:Real}
+
+    # Seeding the RNG
+    Random.seed!(seed)
+
     # Place agents uniformly distributed across the domain
-    pX = reduce(hcat, [rand(Uniform(t...), p.n) for t in dom]) # p.n × N matrix
-    perm = sortperm(sort(sum(pX; dims=2) |> vec))
-    @info perm
-    X = pX[perm, :]
+    X = reduce(hcat, [rand(Uniform(t...), p.n) for t in dom]) # p.n × N matrix
+    # perm = sortperm(sort(sum(pX; dims=2) |> vec))
+    # X = pX[perm, :]
 
     # We consider just 2 media outlets at the "corners"
     M = vcat(
-        fill(-1.0, (1, N)),
-        fill(1.0, (1, N))
+        fill(-one(T), (1, N)),
+        fill(one(T), (1, N))
     ) # FIXME: Parametrize on eltype T instead of hard-coded 1.0
 
     # We divide the domain into orthants, and each orthant has 1 influencer
@@ -93,19 +97,14 @@ function OpinionModelProblem(dom::Vararg{Tuple{T,T},N};
     # Placing the influencers as the barycenter of agents per orthant
     I = _place_influencers(X, AgInfNet)
 
-    # Every agent interacts with every other agent (including themselves)
-    # AgAgNet = trues(p.n, p.n) |> BitMatrix
-    # AgAgNet = bitrand(p.n, p.n) # Nothing interesting happened
-    AgAgNet = falses(p.n, p.n)
-    orthant_subnet = falses(p.n, p.n)
-    # And-ing into AgAgNet to connect individuals that are on the same orthant.
-    for orthant = eachcol(AgInfNet)
-        orthant_members = findall(orthant)
-        foreach(pair -> orthant_subnet[pair...] = true, Iterators.product(orthant_members, orthant_members))
-        AgAgNet = AgAgNet .|| orthant_subnet
-        # Reseting the current orthant's subnetwork for the next iteration
-        fill!(orthant_subnet, false)
-    end
+    ## Every agent interacts with every other agent (including themselves)
+    AgAgNet = trues(p.n, p.n) |> BitMatrix
+
+    # Defining the Agent-Agent interaction matrix as a function of the
+    # Agent-Influencer matrix. In the default case, the matrix represents a
+    # fully connected network. In other cases, the adjacency is computed with
+    # the adjacency to influencers.
+    AgAgNet = AgAgNetF(AgInfNet)
 
     # Assign agents to media outlet randomly s.t. every agent is connected to 1 and only 1 media.
     AgMedNet = _media_network(p.n, p.M)
@@ -472,8 +471,11 @@ function plot_frame(X, Y, Z, C, t)
     )
 
     scatter!(p, eachcol(Z[:, :, t])...,
-        m=:+,
-        c=:purple
+        m=:hexagon,
+        ms = 8,
+        markerstrokecolor=:white,
+        markerstrokewidth=4,
+        c = colors
     )
 
     return p
