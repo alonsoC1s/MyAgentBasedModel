@@ -35,28 +35,38 @@ All other parameters being exactly equal.
 
 ```{julia}
 omp = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123)
-X, Y, Z, C, R = solve(omp)
+X, Y, Z, C, R = solve(omp; seed=201123)
 
-plot_evolution(X, Y, Z, C)
+plot_evolution(X, Y, Z, omp.AgMedNet, C)
 ```
 
 # Everyone interacts only within their clicque
 
-```{julia}
-omp = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123, AgAgNetF=_ag_ag_echo_chamber)
-Xe, Ye, Ze, Ce, Re = solve(omp)
+## Instead of a dense adjacency matix, we see
 
-plot_evolution(Xe, Ye, Ze, Ce)
+```{julia}
+omp_ec = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123, AgAgNetF=_ag_ag_echo_chamber)
+spy(omp_ec.AgAgNet)
+```
+
+## The simulation
+
+```{julia}
+Xe, Ye, Ze, Ce, Re = solve(omp_ec; seed=201123)
+
+plot_evolution(Xe, Ye, Ze, omp_ec.AgMedNet, Ce)
 ```
 
 -----
 
-It's hard to tell a difference, they both look almost the same. The one with the
+- It's hard to tell a difference, they both look almost the same. The one with the
 echo chamber effect exhibits a "lateral spreading".
+
+- The seed used for the integrator in both cases is the same
 
 . . .
 
-The idea was to use Wasserstein distances to measure how different the
+- The idea was to use Wasserstein distances to measure how different the
 distributions are.
 
 ----
@@ -66,12 +76,12 @@ distributions are.
 
 # Last frame of normal simulation
 ```{julia}
-plot_frame(X, Y, Z, C, 200) |> display
+plot_frame(X, Y, Z, omp.AgMedNet, C, 200) |> display
 ```
 
 # Last frame of echo chamber simulation
 ```{julia}
-plot_frame(Xe, Ye, Ze, Ce, 200) |> display
+plot_frame(Xe, Ye, Ze, omp_ec.AgMedNet, Ce, 200) |> display
 ```
 
 :::

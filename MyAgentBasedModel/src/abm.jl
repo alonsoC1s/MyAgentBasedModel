@@ -97,9 +97,6 @@ function OpinionModelProblem(dom::Vararg{Tuple{T,T},N};
     # Placing the influencers as the barycenter of agents per orthant
     I = _place_influencers(X, AgInfNet)
 
-    ## Every agent interacts with every other agent (including themselves)
-    AgAgNet = trues(p.n, p.n) |> BitMatrix
-
     # Defining the Agent-Agent interaction matrix as a function of the
     # Agent-Influencer matrix. In the default case, the matrix represents a
     # fully connected network. In other cases, the adjacency is computed with
@@ -450,21 +447,25 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=MersenneTwiste
     return rX, rY, rZ, rC, rR
 end
 
-function plot_evolution(X, Y, Z, C)
+function plot_evolution(X, Y, Z, B, C)
     T = size(X, 3)
     anim = @animate for t = 1:T
-        plot_frame(X, Y, Z, C, t)
+        plot_frame(X, Y, Z, B, C, t)
     end
 
     return gif(anim, fps=15)
 end
 
-function plot_frame(X, Y, Z, C, t)
+function plot_frame(X, Y, Z, B, C, t)
     colors = [:red, :green, :blue, :black]
+    shapes = [:ltriangle, :rtriangle]
+
     c_idx = findfirst.(C[:, :, t] |> eachrow)
+    s_idx = findfirst.(B |> eachrow)
 
     p = scatter(eachcol(X[:, :, t])...,
         c=colors[c_idx],
+        m = shapes[s_idx],
         legend=:none,
         xlims=(-2, 2),
         ylims=(-2, 2)
