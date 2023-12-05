@@ -1,2 +1,4 @@
 .DS_Store
 .vscode/
+write_ups/*_files/
+MyAgentBasedModel/write_ups/*_files/
