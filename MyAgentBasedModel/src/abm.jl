@@ -393,7 +393,8 @@ associated SDE via Euler--Maruyama with `Nt` time steps and resolution `dt`.
 The kwarg `method` is used to determine the influencer switching method. See
 [`influencer_switch_rates`](@ref) for more information.
 """
-function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=MersenneTwister()) where {T}
+function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01,
+    seed=MersenneTwister(), echo_chamber::Bool=false) where {T}
     X, Y, Z, A, B, C = get_values(omp)
     σ, n, Γ, γ, = omp.p.σ, omp.p.n, omp.p.frictionM, omp.p.frictionI
     M, L = omp.p.M, omp.p.L
@@ -441,6 +442,11 @@ function solve(omp::OpinionModelProblem{T}; Nt=200, dt=0.01, seed=MersenneTwiste
         rR[:, :, i] .= rates
         R = view(rR, :, :, i)
         view(rC, :, :, i + 1) .= switch_influencer(C, X, Z, R, dt)
+
+        if echo_chamber 
+            # Modify Agent-Agent interaction network
+            A .= _ag_ag_echo_chamber(rC[:, :, i+1] |> BitMatrix)
+        end
 
     end
 

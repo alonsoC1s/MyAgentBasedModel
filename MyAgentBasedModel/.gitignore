@@ -1,1 +1,9 @@
 .DS_Store/
+write_ups/*_files/*
+docs/
+*.js
+*.css
+*.eot
+*.ttf
+*.woff
+*.map

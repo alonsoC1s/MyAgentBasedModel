@@ -2,3 +2,4 @@
 .vscode/
 write_ups/*_files/
 MyAgentBasedModel/write_ups/*_files/
+*.{js,css,html}

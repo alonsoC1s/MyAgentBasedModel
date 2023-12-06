@@ -1,0 +1,99 @@
+---
+title: Updates on the Echo chamber experiments
+format: revealjs
+institute: Zuse Institute Berlin
+fig-align: center
+---
+
+:::{.hidden}
+```{julia}
+using Pkg
+Pkg.activate("../.")
+
+using MyAgentBasedModel
+using JLD2
+using Plots
+
+theme(:ggplot2)
+```
+:::
+
+# This is how things looked last time: {.smaller}
+
+```{julia}
+omp = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123)
+X, Y, Z, C, R = solve(omp; seed=201123)
+
+omp_ec = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123, AgAgNetF=_ag_ag_echo_chamber)
+Xe, Ye, Ze, Ce, Re = solve(omp_ec; seed=201123);
+```
+
+:::{.panel-tabset}
+
+# Last frame of normal simulation
+```{julia}
+plot_frame(X, Y, Z, omp.AgMedNet, C, 200) |> display
+```
+
+# Last frame of echo chamber simulation
+```{julia}
+plot_frame(Xe, Ye, Ze, omp_ec.AgMedNet, Ce, 200) |> display
+```
+
+:::
+
+----
+
+For the next simulations we let the Agent-Agent network evolve.
+
+- The network is changed at every integration step
+
+- The new network is determined the same way as it is in the beginning
+
+- Agents only interact with other followers of the same influencer
+
+# Simulation
+
+```{julia}
+omp_ecc = OpinionModelProblem((-2.0, 2.0), (-2.0, 2.0); seed=201123, AgAgNetF=_ag_ag_echo_chamber)
+Xee, Yee, Zee, Cee, Ree = solve(omp_ecc; seed=201123, echo_chamber=true)
+plot_evolution(Xee, Yee, Zee, omp_ecc.AgMedNet, Cee)
+```
+
+# Side by side comparison
+:::{.panel-tabset}
+
+# Last frame of normal simulation
+```{julia}
+plot_frame(X, Y, Z, omp.AgMedNet, C, 200) |> display
+```
+
+# Last frame of echo chamber simulation
+```{julia}
+plot_frame(Xe, Ye, Ze, omp_ec.AgMedNet, Ce, 200) |> display
+```
+
+# Last frame of evolving echo chamber
+
+```{julia}
+plot_frame(Xee, Yee, Zee, omp_ecc.AgMedNet, Cee, 200) |> display
+```
+
+:::
+
+# Conclusion (?)
+
+- Visually, it seems like the difference is almost not noticeable
+
+- The decay into clusters feels a little bit slower
+
+- Without more powerful methods to comapre the simulations, it's hard to draw
+conclusions
+
+
+## Some possible comparison methods
+
+- Multivariate Two-Sample Tests Based on Nearest Neighbors - Schilling
+
+- Methods for Measuring the Difference of Empirical Distributions - Poe, Giraud, Loomis
+
